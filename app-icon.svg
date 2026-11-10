@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="arch"><path d="M212 770 V500 A300 300 0 0 1 812 500 V770 Z"/></clipPath>
+    <linearGradient id="glow" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#FFB25E" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#FFB25E" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="#17181C"/>
+  <!-- hangar body -->
+  <path d="M212 770 V500 A300 300 0 0 1 812 500 V770 Z" fill="#FF7A1A"/>
+  <!-- corrugation ribs -->
+  <g clip-path="url(#arch)" stroke="#E2620A" stroke-width="14">
+    <path d="M262 770 V500 A250 250 0 0 1 762 500 V770" fill="none"/>
+  </g>
+  <!-- open door -->
+  <rect x="352" y="540" width="320" height="230" fill="#1D1E24"/>
+  <rect x="352" y="540" width="320" height="230" fill="url(#glow)"/>
+  <rect x="340" y="522" width="344" height="26" rx="6" fill="#FFE3C2"/>
+  <!-- prompt -->
+  <g stroke="#FFF1DE" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="420,610 480,655 420,700"/>
+    <line x1="515" y1="700" x2="600" y2="700"/>
+  </g>
+  <!-- ground -->
+  <rect x="150" y="770" width="724" height="22" rx="11" fill="#FF7A1A"/>
+</svg>
