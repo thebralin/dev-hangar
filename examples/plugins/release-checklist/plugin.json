@@ -1,0 +1,19 @@
+{
+  "id": "release-checklist",
+  "name": "Чеклист релиза",
+  "version": "1.0.0",
+  "description": "Свой чеклист перед релизом для каждого проекта. Пункт «Сборка проходит» отмечается сам после успешного Build.",
+  "author": "Dev Hangar",
+  "apiVersion": 1,
+  "main": "main.js",
+  "icon": "check",
+  "permissions": [],
+  "settings": [
+    {
+      "key": "items",
+      "label": "Пункты чеклиста (по одному на строку)",
+      "type": "text",
+      "default": "Сборка проходит\nВерсия поднята\nCHANGELOG обновлён\nТег создан и запушен"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 [package]
 name = "dev-hangar"
-version = "0.6.0"
+version = "0.7.0"
 description = "Dev Hangar: все dev-проекты в одном месте"
 edition = "2021"
 

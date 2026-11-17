@@ -1,0 +1,11 @@
+{
+  "id": "projects-dashboard",
+  "name": "Сводка по проектам",
+  "version": "1.0.0",
+  "description": "Отдельный экран в боковой панели: все проекты, ветки и незакоммиченные изменения на одной странице.",
+  "author": "Dev Hangar",
+  "apiVersion": 1,
+  "main": "main.js",
+  "icon": "layers",
+  "permissions": ["projects:read"]
+}

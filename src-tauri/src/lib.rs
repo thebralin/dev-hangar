@@ -7,6 +7,7 @@ mod git;
 mod gitops;
 mod graph;
 mod php;
+mod plugins;
 mod process;
 mod util;
 
@@ -302,6 +303,53 @@ async fn detect_editors() -> R<Vec<String>> {
     .await
 }
 
+// ---------- plugins ----------
+
+#[tauri::command]
+fn plugins_dir(app: AppHandle) -> R<String> {
+    plugins::dir(&app).map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn plugin_list(app: AppHandle) -> R<Vec<plugins::PluginEntry>> {
+    plugins::list(&app)
+}
+
+#[tauri::command]
+fn plugin_read_file(app: AppHandle, folder: String, rel: String) -> R<String> {
+    plugins::read_file(&app, &folder, &rel)
+}
+
+#[tauri::command]
+fn plugin_file_path(app: AppHandle, folder: String, rel: String) -> R<String> {
+    plugins::file_path(&app, &folder, &rel)
+}
+
+#[tauri::command]
+async fn plugin_install(app: AppHandle, src: String) -> R<String> {
+    blocking(move || plugins::install(&app, &src)).await
+}
+
+#[tauri::command]
+async fn plugin_uninstall(app: AppHandle, folder: String) -> R<()> {
+    blocking(move || plugins::uninstall(&app, &folder)).await
+}
+
+#[tauri::command]
+fn plugin_scaffold(app: AppHandle, id: String, name: String) -> R<String> {
+    plugins::scaffold(&app, &id, &name)
+}
+
+#[tauri::command]
+async fn exec_capture(cwd: String, command: String, timeout_ms: Option<u64>) -> R<plugins::ExecResult> {
+    blocking(move || plugins::exec_capture(&cwd, &command, timeout_ms.unwrap_or(60_000))).await
+}
+
+#[tauri::command]
+fn write_text_file(path: String, content: String) -> R<()> {
+    plugins::write_text(&path, &content)
+}
+
 // ---------- config ----------
 
 fn config_path(app: &AppHandle) -> R<PathBuf> {
@@ -387,6 +435,15 @@ pub fn run() {
             git_analytics,
             code_stats,
             code_graph,
+            plugins_dir,
+            plugin_list,
+            plugin_read_file,
+            plugin_file_path,
+            plugin_install,
+            plugin_uninstall,
+            plugin_scaffold,
+            exec_capture,
+            write_text_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

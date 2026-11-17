@@ -1,0 +1,11 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "Минимальный пример: своя вкладка, команда в меню и счётчик в хранилище плагина.",
+  "author": "Dev Hangar",
+  "apiVersion": 1,
+  "main": "main.js",
+  "icon": "sparkles",
+  "permissions": []
+}

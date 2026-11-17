@@ -3,6 +3,16 @@ import { listen } from "@tauri-apps/api/event";
 import { AnsiUp } from "ansi_up";
 import { api, joinPath, baseName, type Action, type Checkpoint, type GitSummary, type ProjectInfo } from "./api";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { emit } from "../plugins/bus";
+
+/** Persisted plugin state (config.json → "plugins"). */
+export interface PluginsConfig {
+  enabled: Record<string, boolean>;
+  /** hangar.storage, per plugin id */
+  data: Record<string, Record<string, unknown>>;
+  /** values for manifest.settings, per plugin id */
+  settings: Record<string, Record<string, unknown>>;
+}
 
 export interface CustomCommand { id: string; label: string; command: string; cwd?: string; kind?: string }
 
@@ -47,6 +57,8 @@ export interface Proc {
 
 export interface Brief {
   info?: ProjectInfo;
+  /** info as returned by Rust, before plugin stacks were applied */
+  raw?: ProjectInfo;
   git?: GitSummary;
   loading: boolean;
   error?: string;
@@ -75,7 +87,8 @@ export const state = reactive({
   toast: null as null | { text: string; kind: "info" | "error" },
   detectedEditors: [] as string[],
   collapsedGroups: {} as Record<string, boolean>,
-  view: "project" as "project" | "disk",
+  view: "project" as "project" | "disk" | "plugins" | `page:${string}`,
+  pluginConfig: { enabled: {}, data: {}, settings: {} } as PluginsConfig,
   checkpoints: {} as Record<string, Checkpoint[]>,
 });
 
@@ -118,7 +131,13 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
     api
-      .saveConfig({ projects: state.projects, settings: state.settings, collapsedGroups: state.collapsedGroups, selected: state.selected })
+      .saveConfig({
+        projects: state.projects,
+        settings: state.settings,
+        collapsedGroups: state.collapsedGroups,
+        selected: state.selected,
+        plugins: state.pluginConfig,
+      })
       .catch((e) => toast("Не удалось сохранить настройки: " + e, "error"));
   }, 300);
 }
@@ -130,11 +149,13 @@ export async function loadConfig() {
     state.settings = { ...defaultSettings, ...(cfg.settings || {}) };
     state.collapsedGroups = cfg.collapsedGroups || {};
     if (cfg.selected && state.projects.some((p) => p.path === cfg.selected)) state.selected = cfg.selected;
+    const pc = cfg.plugins || {};
+    state.pluginConfig = { enabled: pc.enabled || {}, data: pc.data || {}, settings: pc.settings || {} };
   } catch (e) {
     toast("Ошибка чтения конфига: " + e, "error");
   }
   state.loaded = true;
-  watch(() => [state.projects, state.settings, state.collapsedGroups, state.selected], scheduleSave, { deep: true });
+  watch(() => [state.projects, state.settings, state.collapsedGroups, state.selected, state.pluginConfig], scheduleSave, { deep: true });
   api.detectEditors().then((e) => (state.detectedEditors = e)).catch(() => {});
   refreshAllBriefs();
 }
@@ -176,13 +197,49 @@ export function selectProject(path: string) {
   state.view = "project";
 }
 
+// ---------------- plugin stacks ----------------
+
+/** Set by the plugin host: applies plugin stack detectors on top of the Rust analysis. */
+type InfoEnricher = (raw: ProjectInfo) => Promise<ProjectInfo>;
+let enricher: InfoEnricher | null = null;
+export function setInfoEnricher(fn: InfoEnricher | null) {
+  enricher = fn;
+}
+async function enrich(raw: ProjectInfo): Promise<ProjectInfo> {
+  if (!enricher) return raw;
+  try {
+    return await enricher(raw);
+  } catch (e) {
+    console.error("[plugins] stack detection failed", e);
+    return raw;
+  }
+}
+/** Analyze a folder: Rust detection + plugin stacks. */
+export async function analyzeProject(path: string) {
+  return enrich(await api.analyze(path));
+}
+
+/** Re-apply plugin stacks to every loaded project (after plugins were enabled/disabled). */
+export async function reenrichAll() {
+  const paths = Object.keys(state.briefs);
+  const worker = async () => {
+    while (paths.length) {
+      const p = paths.shift()!;
+      const b = state.briefs[p];
+      if (b?.raw) b.info = await enrich(b.raw);
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+}
+
 export async function refreshBrief(path: string) {
   const b: Brief = state.briefs[path] || { loading: true };
   b.loading = true;
   state.briefs[path] = b;
   try {
-    const [info, git] = await Promise.all([api.analyze(path), api.gitSummary(path).catch(() => undefined)]);
-    state.briefs[path] = { info, git, loading: false };
+    const [raw, git] = await Promise.all([api.analyze(path), api.gitSummary(path).catch(() => undefined)]);
+    const info = await enrich(raw);
+    state.briefs[path] = { info, raw, git, loading: false };
   } catch (e) {
     state.briefs[path] = { ...b, loading: false, error: String(e) };
   }
@@ -215,7 +272,7 @@ export function activityOf(path: string): number {
 export async function scanFolder(parent: string): Promise<number> {
   let added = 0;
   const looksLikeProject = async (dir: string) => {
-    const info = await api.analyze(dir).catch(() => null);
+    const info = await analyzeProject(dir).catch(() => null);
     if (!info) return false;
     return info.isGit || !info.stacks.some((s) => s.id === "unknown");
   };
@@ -292,6 +349,7 @@ export async function runAction(projectPath: string, action: Action | CustomComm
   if (!state.procOrder.includes(id)) state.procOrder.push(id);
   state.activeProc[projectPath] = id;
   state.tab = "console";
+  emit("process:start", { projectPath, label: proc.label, command: proc.command, kind });
   try {
     await api.run(id, cwd, action.command);
   } catch (e) {
@@ -376,6 +434,10 @@ export async function initProcessEvents() {
     p.lines.push({
       html: `<span class="sys">— процесс завершён${e.payload.code != null ? ` с кодом ${e.payload.code}` : ""} за ${dur} с —</span>`,
       stream: "sys",
+    });
+    emit("process:exit", {
+      projectPath: p.projectPath, label: p.label, command: p.command, kind: p.kind,
+      code: e.payload.code, durationMs: p.endedAt - p.startedAt,
     });
     if (p.kind === "build" || p.kind === "install") {
       toast(`${p.label}: ${e.payload.code === 0 ? "готово ✓" : "ошибка (код " + e.payload.code + ")"}`, e.payload.code === 0 ? "info" : "error");

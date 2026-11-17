@@ -1,0 +1,14 @@
+/* Классы с префиксом плагина, чтобы не пересекаться со стилями Hangar.
+   Цвета — только через CSS-переменные Hangar: так плагин работает в светлой и тёмной теме. */
+.npo { padding: 16px 20px; }
+.npo-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.npo-table { width: 100%; border-collapse: collapse; }
+.npo-table th { text-align: left; font-weight: 600; color: var(--text-2); font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.npo-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.npo-table tr:hover td { background: var(--hover); }
+.npo-kind { font-size: 11px; padding: 1px 7px; border-radius: 9px; }
+.npo-kind.major { color: var(--red); background: var(--red-soft); }
+.npo-kind.minor { color: var(--yellow); background: var(--yellow-soft); }
+.npo-kind.patch { color: var(--green); background: var(--green-soft); }
+.npo-error { color: var(--red); background: var(--red-soft); padding: 10px 12px; border-radius: var(--radius); white-space: pre-wrap; }
+.npo-ok { display: flex; align-items: center; gap: 8px; color: var(--green); font-weight: 600; }

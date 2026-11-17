@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watchEffect } from "vue";
+import { computed, onMounted, ref, watch, watchEffect } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import Sidebar from "./components/Sidebar.vue";
 import ProjectView from "./components/ProjectView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
 import DiskView from "./components/DiskView.vue";
+import PluginsView from "./components/PluginsView.vue";
+import PluginMount from "./components/PluginMount.vue";
+import { host, loadPlugins, startPluginEvents } from "./plugins/host";
 import Icon from "./components/Icon.vue";
 import { state, loadConfig, initProcessEvents, addProject, toast, findProject, selectProject, refreshBrief } from "./lib/store";
 import { api, parentDir } from "./lib/api";
@@ -19,12 +22,23 @@ watchEffect(() => {
 });
 
 const current = computed(() => findProject(state.selected));
+const activePage = computed(() => host.pages.find((p) => p.key === state.view));
+
+// a plugin page disappeared (plugin disabled/reloaded) → back to the project
+watch(
+  () => state.view.startsWith("page:") && !activePage.value,
+  (gone) => {
+    if (gone && !host.busy) state.view = "project";
+  },
+);
 
 onMounted(async () => {
   await initProcessEvents();
   await loadConfig();
   if (!state.selected && state.projects.length) state.selected = state.projects[0].path;
   if (state.selected) selectProject(state.selected);
+  startPluginEvents();
+  loadPlugins(); // not awaited: a slow plugin must not delay the UI
 
   await getCurrentWebview().onDragDropEvent(async (event) => {
     const p = event.payload;
@@ -66,6 +80,13 @@ onMounted(async () => {
     <Sidebar @settings="showSettings = true" />
     <main class="main">
       <DiskView v-if="state.view === 'disk'" />
+      <PluginsView v-else-if="state.view === 'plugins'" />
+      <PluginMount
+        v-else-if="activePage"
+        :key="activePage.key"
+        :plugin-id="activePage.pluginId"
+        :mount="(el, signal) => activePage!.page.mount(el, { signal })"
+      />
       <ProjectView v-else-if="current" :key="current.path" :entry="current" />
       <div v-else class="empty welcome">
         <Icon name="folder-open" :size="48" />

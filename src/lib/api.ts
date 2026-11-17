@@ -107,7 +107,19 @@ export interface GraphNode { id: string; path: string; lang: string; lines: numb
 export interface GraphEdge { source: string; target: string; kind: "import" | "ipc"; count: number }
 export interface CodeGraph { nodes: GraphNode[]; edges: GraphEdge[]; truncated: boolean }
 
+export interface PluginEntry { folder: string; dir: string; manifest?: Record<string, unknown> | null; error?: string | null }
+export interface ExecResult { code: number | null; stdout: string; stderr: string; timedOut: boolean }
+
 export const api = {
+  pluginsDir: () => invoke<string>("plugins_dir"),
+  pluginList: () => invoke<PluginEntry[]>("plugin_list"),
+  pluginReadFile: (folder: string, rel: string) => invoke<string>("plugin_read_file", { folder, rel }),
+  pluginFilePath: (folder: string, rel: string) => invoke<string>("plugin_file_path", { folder, rel }),
+  pluginInstall: (src: string) => invoke<string>("plugin_install", { src }),
+  pluginUninstall: (folder: string) => invoke<void>("plugin_uninstall", { folder }),
+  pluginScaffold: (id: string, name: string) => invoke<string>("plugin_scaffold", { id, name }),
+  execCapture: (cwd: string, command: string, timeoutMs?: number) => invoke<ExecResult>("exec_capture", { cwd, command, timeoutMs }),
+  writeTextFile: (path: string, content: string) => invoke<void>("write_text_file", { path, content }),
   codeGraph: (root: string) => invoke<CodeGraph>("code_graph", { root }),
   gitAnalytics: (path: string, maxCommits?: number) => invoke<GitAnalytics>("git_analytics", { path, maxCommits }),
   codeStats: (root: string) => invoke<CodeStats>("code_stats", { root }),

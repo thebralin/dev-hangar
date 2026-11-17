@@ -9,6 +9,7 @@ import {
 } from "../lib/store";
 import { parentDir, baseName } from "../lib/api";
 import { relTime } from "../lib/format";
+import { host, pluginOf } from "../plugins/host";
 
 const emit = defineEmits<{ settings: [] }>();
 const q = ref("");
@@ -164,9 +165,24 @@ function dirtyCount(p: ProjectEntry) {
       </div>
     </div>
 
+    <div v-if="host.pages.length" class="pages">
+      <button
+        v-for="p in host.pages"
+        :key="p.key"
+        class="page"
+        :class="{ on: state.view === p.key }"
+        :title="`Плагин «${pluginOf(p.pluginId)?.manifest?.name ?? p.pluginId}»`"
+        @click="state.view = state.view === p.key ? 'project' : p.key"
+      >
+        <Icon :name="p.page.icon || 'puzzle'" :size="14" />
+        <span class="ellipsis">{{ p.page.label }}</span>
+      </button>
+    </div>
+
     <div class="foot">
-      <button class="btn sm ghost" @click="emit('settings')"><Icon name="settings" :size="14" /> Настройки</button>
+      <button class="btn sm icon ghost" title="Настройки" @click="emit('settings')"><Icon name="settings" :size="14" /></button>
       <button class="btn sm ghost" :class="{ on: state.view === 'disk' }" title="Уборка node_modules, target, dist по всем проектам" @click="state.view = state.view === 'disk' ? 'project' : 'disk'"><Icon name="drive" :size="14" /> Диск</button>
+      <button class="btn sm ghost" :class="{ on: state.view === 'plugins' }" title="Плагины: свои вкладки, кнопки и инструменты" @click="state.view = state.view === 'plugins' ? 'project' : 'plugins'"><Icon name="puzzle" :size="14" /> Плагины</button>
       <span class="spacer" />
       <span v-if="runningCount" class="badge green" title="Запущенные процессы"><span class="dot" style="background: var(--green)" />{{ runningCount }}</span>
       <button
@@ -228,6 +244,13 @@ function dirtyCount(p: ProjectEntry) {
 .live { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); animation: pulse 1.6s infinite; flex: none; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 5px transparent; } }
 .hint { padding: 24px 12px; text-align: center; color: var(--text-3); }
+.pages { border-top: 1px solid var(--border); padding: 6px; max-height: 30%; overflow-y: auto; flex: none; }
+.page {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0; border-radius: 6px;
+  background: none; color: var(--text-2); cursor: pointer; text-align: left;
+}
+.page:hover { background: var(--hover); color: var(--text); }
+.page.on { background: var(--active); color: var(--text); }
 .foot .btn.on { background: var(--active); color: var(--text); }
 .foot { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); }
 .spinner { width: 12px; height: 12px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }

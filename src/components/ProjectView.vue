@@ -12,8 +12,10 @@ import AnalyticsTab from "./AnalyticsTab.vue";
 import GraphTab from "./GraphTab.vue";
 import CheckpointButton from "./CheckpointButton.vue";
 import AiContextModal from "./AiContextModal.vue";
+import PluginMount from "./PluginMount.vue";
 import { state, refreshBrief, runAction, stopProc, procId, displayName, toast, type ProjectEntry } from "../lib/store";
 import { api, type Action } from "../lib/api";
+import { host, isVisible, runPluginAction, projectContextOf } from "../plugins/host";
 
 const props = defineProps<{ entry: ProjectEntry }>();
 const brief = computed(() => state.briefs[props.entry.path]);
@@ -110,7 +112,23 @@ const tabs = computed(() => [
   { id: "analytics", label: "Аналитика", icon: "chart" },
   { id: "deps", label: "Зависимости", icon: "package", count: info.value?.dependencies.length || undefined },
   { id: "console", label: "Консоль", icon: "terminal", count: consoleCount.value || undefined, live: consoleCount.value > 0 },
+  ...pluginTabs.value.map((t) => ({ id: t.key, label: t.tab.label, icon: t.tab.icon || "puzzle", count: undefined, live: false })),
 ]);
+
+// ---------- plugins ----------
+const pluginTabs = computed(() => host.tabs.filter((t) => isVisible(t.tab, props.entry)));
+const activePluginTab = computed(() => pluginTabs.value.find((t) => t.key === state.tab));
+const pluginActions = computed(() => host.actions.filter((a) => isVisible(a.action, props.entry)));
+const toolbarPluginActions = computed(() => pluginActions.value.filter((a) => a.action.toolbar));
+const menuPluginActions = computed(() => pluginActions.value.filter((a) => !a.action.toolbar));
+
+// a plugin tab disappeared (plugin disabled / `when` no longer matches) → back to overview
+watch(
+  () => state.tab.startsWith("plugin:") && !activePluginTab.value,
+  (gone) => {
+    if (gone && !host.busy) state.tab = "overview";
+  },
+);
 
 // files tab can be asked to open a specific file
 const fileRequest = ref<{ path: string; line?: number } | null>(null);
@@ -123,6 +141,17 @@ function showFileHistory(rel: string) {
   gitFileRequest.value = rel;
   state.tab = "git";
 }
+
+// hangar.ui.openFile() from a plugin
+watch(
+  () => host.fileRequest,
+  (r) => {
+    if (!r) return;
+    openFile(r.path, r.line);
+    host.fileRequest = null;
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.entry.path,
@@ -177,7 +206,7 @@ watch(
           <div class="more-wrap">
             <button class="btn icon" title="Все команды" @click="moreOpen = !moreOpen"><Icon name="down" :size="14" /></button>
             <div v-if="moreOpen" class="menu" @mouseleave="moreOpen = false">
-              <div v-if="!openActions.length && !entry.customCommands?.length" class="menu-empty">Команды не найдены</div>
+              <div v-if="!openActions.length && !entry.customCommands?.length && !menuPluginActions.length" class="menu-empty">Команды не найдены</div>
               <button v-for="{ a, module } in openActions" :key="a.id" @click="moreOpen = false; runAction(entry.path, a, module)">
                 <span class="k">{{ a.kind }}</span>
                 <span class="grow ellipsis">{{ module ? module + " · " : "" }}{{ a.label }}</span>
@@ -188,11 +217,23 @@ watch(
                 <span class="grow ellipsis">{{ c.label }}</span>
                 <code class="dim ellipsis">{{ c.command }}</code>
               </button>
+              <button v-for="a in menuPluginActions" :key="a.key" :title="a.action.title" @click="moreOpen = false; runPluginAction(a, entry)">
+                <span class="k">плагин</span>
+                <span class="grow ellipsis">{{ a.action.label }}</span>
+                <code class="dim ellipsis">{{ a.pluginName }}</code>
+              </button>
             </div>
           </div>
           <span class="sep" />
           <CheckpointButton :entry="entry" :git="git" @goto="(t: string) => (state.tab = t)" />
           <button class="btn" title="Собрать контекст проекта для ИИ / создать CLAUDE.md" :disabled="!info" @click="aiOpen = true"><Icon name="sparkles" :size="14" /> ИИ</button>
+          <button
+            v-for="a in toolbarPluginActions"
+            :key="a.key"
+            class="btn"
+            :title="a.action.title || `${a.action.label} (плагин «${a.pluginName}»)`"
+            @click="runPluginAction(a, entry)"
+          ><Icon :name="a.action.icon || 'puzzle'" :size="14" /> {{ a.action.label }}</button>
           <span class="sep" />
           <button class="btn" :title="`Открыть в ${state.settings.editor}`" @click="openEditor"><Icon name="code" :size="14" /> IDE</button>
           <button class="btn icon" title="Открыть в проводнике" @click="openExplorer"><Icon name="folder-open" :size="14" /></button>
@@ -227,6 +268,12 @@ watch(
         <AnalyticsTab v-if="state.tab === 'analytics'" :entry="entry" :git="git" @open-file="openFile" @history="showFileHistory" />
         <DepsTab v-if="state.tab === 'deps'" :info="info" />
         <ConsoleTab v-if="state.tab === 'console'" :entry="entry" />
+        <PluginMount
+          v-if="activePluginTab"
+          :key="activePluginTab.key"
+          :plugin-id="activePluginTab.pluginId"
+          :mount="(el, signal) => activePluginTab!.tab.mount(el, { project: projectContextOf(entry), signal })"
+        />
       </template>
       <div v-else class="empty">Анализ проекта…</div>
     </div>

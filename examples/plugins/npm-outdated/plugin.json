@@ -1,0 +1,27 @@
+{
+  "id": "npm-outdated",
+  "name": "Устаревшие npm-пакеты",
+  "version": "1.0.0",
+  "description": "Вкладка с результатом npm outdated и обновлением пакетов в один клик. Только для Node-проектов.",
+  "author": "Dev Hangar",
+  "apiVersion": 1,
+  "main": "main.js",
+  "style": "style.css",
+  "icon": "package",
+  "permissions": ["shell", "fs:read"],
+  "settings": [
+    {
+      "key": "includeDev",
+      "label": "Показывать devDependencies",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "timeout",
+      "label": "Таймаут проверки, секунд",
+      "type": "number",
+      "default": 60,
+      "description": "npm outdated ходит в реестр — на медленной сети увеличьте"
+    }
+  ]
+}

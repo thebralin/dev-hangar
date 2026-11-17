@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#-требования)
-[![Version](https://img.shields.io/badge/version-0.6.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
+[![Version](https://img.shields.io/badge/version-0.7.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
 
 [Возможности](#-возможности) · [Установка](#-установка) · [Сборка из исходников](#%EF%B8%8F-сборка-из-исходников) · [Структура](#-структура)
 
@@ -43,6 +43,7 @@
 | 🗂️ **Файлы** | Дерево, нечёткий и полнотекстовый поиск, подсветка (Shiki), превью Markdown и картинок, «Открыть в IDE» с переходом к строке. |
 | 🧹 **Уборка диска** | `node_modules`, `target`, `vendor`, `dist`, `.next` по всем проектам с размерами — выбери неактивные 30+/60+ дней и удали. |
 | 📦 **Зависимости** | npm, Cargo, pip, go.mod, composer — со ссылками на страницы пакетов. |
+| 🧩 **Плагины** | Поддержка новых стеков (бейдж, кнопки Dev/Build, зависимости), свои вкладки и экраны с любым интерфейсом, кнопки и реакции на события — на обычном JavaScript. «Создать плагин» — и шаблон уже открыт в редакторе. [Как написать плагин →](docs/plugins/README.md) |
 
 ## 📥 Установка
 
@@ -96,9 +97,12 @@ npm run tauri build    # сборка установщика
 ```
 src/                     Vue-фронтенд
 ├─ components/           вкладки: Overview, Files, Git, Graph, Analytics, Deps, Console…
-└─ lib/
-   ├─ store.ts           состояние, запуск процессов, конфиг
-   └─ highlight.ts       подсветка синтаксиса (Shiki)
+├─ lib/
+│  ├─ store.ts           состояние, запуск процессов, конфиг
+│  └─ highlight.ts       подсветка синтаксиса (Shiki)
+└─ plugins/
+   ├─ host.ts            загрузка плагинов и Plugin API
+   └─ hangar.d.ts        типы Plugin API (единый источник правды)
 
 src-tauri/src/           Rust-бэкенд
 ├─ detect.rs             определение стека, команды запуска, зависимости
@@ -110,9 +114,14 @@ src-tauri/src/           Rust-бэкенд
 ├─ extra.rs              TODO-скан, дерево для ИИ, уборка диска
 ├─ analytics.rs          аналитика по git-истории и коду
 ├─ graph.rs              граф импортов
+├─ plugins.rs            папка плагинов: список, установка, шаблон
 └─ lib.rs                tauri-команды, IDE/терминал, конфиг
+
+docs/plugins/            руководство и справочник API для авторов плагинов
+examples/plugins/        примеры: hello-world, hugo-stack, projects-dashboard, npm-outdated, release-checklist
 ```
 
+**Хочешь добавить что-то своё?** Напиши плагин — [docs/plugins](docs/plugins/README.md).
 **Хочешь научить Hangar новому стеку?** Смотри `analyze_module` в [`src-tauri/src/detect.rs`](src-tauri/src/detect.rs).
 
 ---

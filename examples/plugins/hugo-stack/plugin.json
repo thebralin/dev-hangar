@@ -1,0 +1,19 @@
+{
+  "id": "hugo-stack",
+  "name": "Hugo",
+  "version": "1.0.0",
+  "description": "Поддержка сайтов на Hugo: бейдж стека, кнопки Dev (hugo server) и Build (hugo --minify), тема в «Зависимостях».",
+  "author": "Dev Hangar",
+  "apiVersion": 1,
+  "main": "main.js",
+  "icon": "globe",
+  "permissions": [],
+  "settings": [
+    {
+      "key": "drafts",
+      "label": "Показывать черновики в hugo server (-D)",
+      "type": "boolean",
+      "default": true
+    }
+  ]
+}
