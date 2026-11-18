@@ -228,6 +228,11 @@ fn cover_remove(app: AppHandle, project: String) -> R<()> {
     covers::remove(&app, &project)
 }
 
+#[tauri::command]
+async fn project_logo(project: String) -> R<Option<String>> {
+    blocking(move || Ok(covers::logo(&project))).await
+}
+
 // ---------- external apps ----------
 
 fn quote_exe(editor: &str) -> String {
@@ -505,6 +510,7 @@ pub fn run() {
             cover_capture,
             cover_import,
             cover_remove,
+            project_logo,
             open_in_editor,
             open_terminal,
             detect_editors,

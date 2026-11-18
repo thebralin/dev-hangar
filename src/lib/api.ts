@@ -156,6 +156,8 @@ export const api = {
   coverCapture: (project: string, url: string, width?: number, height?: number) => invoke<string>("cover_capture", { project, url, width, height }),
   coverImport: (project: string, src: string) => invoke<string>("cover_import", { project, src }),
   coverRemove: (project: string) => invoke<void>("cover_remove", { project }),
+  /** absolute path of the project's logo / favicon / app icon, if it has one */
+  projectLogo: (project: string) => invoke<string | null>("project_logo", { project }),
   openInEditor: (editor: string, path: string, line?: number) => invoke<void>("open_in_editor", { editor, path, line }),
   openTerminal: (path: string, terminal?: string, command?: string) => invoke<void>("open_terminal", { path, terminal, command }),
   bundledPlugins: () => invoke<{ id: string; manifest: Record<string, unknown> }[]>("bundled_plugins"),

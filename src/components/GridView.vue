@@ -6,7 +6,7 @@ import Icon from "./Icon.vue";
 import StackBadge from "./StackBadge.vue";
 import {
   state, filterProjects, selectProject, displayName, activityOf, isRunning,
-  captureCover, importCover, removeCover, pickActions, toast, type ProjectEntry,
+  captureCover, importCover, removeCover, pickActions, toast, logoOf, isLightLogo, type ProjectEntry,
 } from "../lib/store";
 import { relTime, fullDate, hueOf, initials, plural } from "../lib/format";
 import { passports, loadPassports, taskStats, currentMilestone, STATUS_LABELS } from "../lib/passport";
@@ -43,6 +43,11 @@ function stacks(p: ProjectEntry) {
 function coverSrc(p: ProjectEntry) {
   return p.cover && !broken[p.cover] ? convertFileSrc(p.cover) : "";
 }
+/** without a cover: the project's own logo / favicon */
+function logoSrc(p: ProjectEntry) {
+  const l = logoOf(p.path);
+  return l && !broken[l] ? convertFileSrc(l) : "";
+}
 function canShoot(p: ProjectEntry) {
   return pickActions(info(p), "dev").length > 0;
 }
@@ -62,7 +67,9 @@ async function pickImage(p: ProjectEntry) {
 
 // ---------- batch: screenshot every project without a cover ----------
 const batch = reactive({ running: false, done: 0, total: 0, ok: 0, cancel: false, current: "" });
-const missing = computed(() => list.value.filter((p) => !p.cover && canShoot(p) && info(p)?.exists !== false));
+const missing = computed(() =>
+  list.value.filter((p) => !p.cover && !logoSrc(p) && canShoot(p) && info(p)?.exists !== false),
+);
 
 async function shootAll() {
   if (batch.running) {
@@ -112,7 +119,7 @@ onBeforeUnmount(() => (batch.cancel = true));
           class="btn sm"
           :class="{ danger: batch.running }"
           :disabled="!batch.running && !missing.length"
-          :title="batch.running ? 'Остановить после текущего' : 'Запустить dev каждого проекта без обложки и сделать скриншот. Проекты без dev-команды пропускаются.'"
+          :title="batch.running ? 'Остановить после текущего' : 'Запустить dev каждого проекта без обложки и логотипа и сделать скриншот. Проекты без dev-команды пропускаются.'"
           @click="shootAll"
         >
           <Icon :name="batch.running ? 'stop' : 'camera'" :size="13" />
@@ -132,6 +139,12 @@ onBeforeUnmount(() => (batch.cancel = true));
       >
         <div class="cover">
           <img v-if="coverSrc(p)" :src="coverSrc(p)" alt="" draggable="false" @error="broken[p.cover!] = true" />
+          <div v-else-if="logoSrc(p)" class="ph logo" :style="{ '--h': hueOf(displayName(p)) }">
+            <img class="lbg" :src="logoSrc(p)" alt="" draggable="false" />
+            <span class="tile" :class="{ dark: isLightLogo(logoSrc(p)) }">
+              <img :src="logoSrc(p)" alt="" draggable="false" @error="broken[state.logos[p.path]!] = true" />
+            </span>
+          </div>
           <div v-else class="ph" :style="{ '--h': hueOf(displayName(p)) }">
             <span class="ini">{{ initials(displayName(p)) }}</span>
           </div>
@@ -226,6 +239,19 @@ h1 { font-size: 19px; margin: 0; }
     radial-gradient(circle at 20% 15%, hsl(var(--h) 70% 60% / .45), transparent 55%),
     linear-gradient(135deg, hsl(var(--h) 45% 30%), hsl(calc(var(--h) + 50) 50% 20%));
 }
+/* logo: blurred copy as the backdrop, the logo itself on a light tile (favicons are drawn for light tabs) */
+.ph.logo { position: relative; }
+.cover .ph.logo img.lbg {
+  position: absolute; inset: 0; object-fit: cover; object-position: center;
+  filter: blur(26px) saturate(1.5); transform: scale(1.5); opacity: .5;
+}
+.tile {
+  position: relative; width: 38%; aspect-ratio: 1; max-height: 70%; padding: 6%; border-radius: 18%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.94); box-shadow: 0 8px 24px rgba(0,0,0,.3);
+}
+.tile.dark { background: rgba(14,18,24,.9); }
+.cover .tile img { width: 100%; height: 100%; object-fit: contain; object-position: center; }
 .ini { font-size: 42px; font-weight: 750; color: rgba(255,255,255,.88); letter-spacing: .03em; text-shadow: 0 2px 12px rgba(0,0,0,.25); }
 
 .ctools { position: absolute; right: 8px; top: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }

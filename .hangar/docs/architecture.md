@@ -25,7 +25,7 @@ Vue (src/)  ──invoke──►  Rust-команды (src-tauri/src/lib.rs)  �
 | `extra.rs` | Скан TODO/FIXME/HACK/XXX/BUG, дерево для ИИ-контекста, запись `CLAUDE.md`/`AGENTS.md`, уборка артефактов сборки |
 | `analytics.rs` | Аналитика по git-истории и строкам кода |
 | `graph.rs` | Граф импортов (JS/TS/Vue/Svelte/Astro, CSS, HTML, Python, Rust, Go, PHP; Tauri `invoke` → Rust-команда) |
-| `covers.rs` | Обложки сетки: скриншот dev-сервера headless Edge/Chrome или своя картинка, в `<config>/covers/` |
+| `covers.rs` | Обложки сетки: скриншот dev-сервера headless Edge/Chrome или своя картинка, в `<config>/covers/`; без обложки — логотип/favicon из самого проекта (`logo()`, не копируется) |
 | `plugins.rs` | Только файлы плагинов: список, чтение, установка/удаление, шаблон, встроенные плагины, `exec_capture`, запись текста |
 | `util.rs` | `command` (без мигающей консоли на Windows), `shell` (`cmd /C` с `chcp 65001` / `sh -c`), кэш поиска в PATH |
 

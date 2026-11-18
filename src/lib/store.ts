@@ -101,6 +101,8 @@ export const state = reactive({
   checkpoints: {} as Record<string, Checkpoint[]>,
   /** projectPath → what the cover screenshot is doing right now */
   coverBusy: {} as Record<string, "starting" | "waiting" | "shooting">,
+  /** projectPath → logo / favicon found in the project (null = none); the default look without a cover */
+  logos: {} as Record<string, string | null>,
 });
 
 /** Search + sort used by the sidebar and the grid (pinned first). */
@@ -469,10 +471,53 @@ export async function sendInput(id: string, text: string) {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+const logoPending = new Set<string>();
 /**
- * Auto cover: start the dev server (unless it already runs), wait for its URL,
- * take one headless-browser screenshot and stop what we started.
+ * The project's logo / favicon (absolute path) — shown when there is no cover.
+ * Looked up once per session on first use; `undefined` while loading.
  */
+export function logoOf(path: string): string | null | undefined {
+  if (!(path in state.logos) && !logoPending.has(path)) {
+    logoPending.add(path);
+    api
+      .projectLogo(path)
+      .then((l) => (state.logos[path] = l ?? null))
+      .catch(() => (state.logos[path] = null))
+      .finally(() => logoPending.delete(path));
+  }
+  return state.logos[path];
+}
+
+/** img src → is the logo almost white (then it goes on a dark tile instead of a light one) */
+const lightLogos = reactive<Record<string, boolean>>({});
+export function isLightLogo(src: string): boolean {
+  if (!(src in lightLogos)) {
+    lightLogos[src] = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = c.height = 24;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, 24, 24);
+        const d = ctx.getImageData(0, 0, 24, 24).data;
+        let sum = 0, n = 0;
+        for (let k = 0; k < d.length; k += 4) {
+          if (d[k + 3] < 40) continue;
+          sum += (0.2126 * d[k] + 0.7152 * d[k + 1] + 0.0722 * d[k + 2]) / 255;
+          n++;
+        }
+        lightLogos[src] = n > 0 && sum / n > 0.82;
+      } catch {
+        /* unreadable — keep the light tile */
+      }
+    };
+    img.src = src;
+  }
+  return lightLogos[src];
+}
+
 /** Does anything answer at `url`? (The first request also makes Next/Nuxt & co. compile the page.) */
 async function reachable(url: string): Promise<boolean> {
   const ctrl = new AbortController();
@@ -487,6 +532,10 @@ async function reachable(url: string): Promise<boolean> {
   }
 }
 
+/**
+ * Auto cover: start the dev server (unless it already runs), wait for its URL,
+ * take one headless-browser screenshot and stop what we started.
+ */
 export async function captureCover(path: string, opts: { quiet?: boolean } = {}): Promise<boolean> {
   const entry = findProject(path);
   if (!entry || state.coverBusy[entry.path]) return false;
@@ -563,6 +612,7 @@ export async function removeCover(path: string) {
   const entry = findProject(path);
   if (!entry) return;
   entry.cover = undefined;
+  delete state.logos[entry.path]; // look for the logo again — it is what shows now
   await api.coverRemove(entry.path).catch(() => {});
 }
 

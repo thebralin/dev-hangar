@@ -249,8 +249,182 @@ pub fn remove(app: &AppHandle, project: &str) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- logo / favicon: the default look of a project without a cover ----------
+
+/// Folders where projects usually keep their logo, favicon or app icon (relative to a project root).
+const LOGO_DIRS: &[&str] = &[
+    "", "public", "static", "assets", "src", "src/assets", "src/app", "app", "src/public", "resources",
+    "web", "www", "wwwroot", "client/public", "frontend/public", "web/public", "public/images", "public/img",
+    "public/icons", "static/images", "static/img", "assets/images", "assets/img", "assets/icons",
+    "src/assets/images", "src/assets/img", "src/assets/icons", "images", "img", "icons", "src-tauri/icons",
+    "build", ".github", "docs", "media",
+];
+const LOGO_EXTS: &[&str] = &["svg", "png", "ico", "webp", "jpg", "jpeg", "avif", "gif"];
+/// Framework logos from project templates — not the project's own.
+const TEMPLATE_LOGOS: &[&str] = &[
+    "vite", "vue", "react", "next", "vercel", "nuxt", "svelte", "tauri", "typescript", "javascript", "angular",
+    "astro", "electron", "deno", "bun", "node", "rust", "go", "python", "php", "laravel", "window", "file", "globe",
+];
+
+/// Pixel size of a png / ico / svg (svg counts as large), `None` when unknown.
+fn image_size(path: &Path, ext: &str) -> Option<u32> {
+    if ext == "svg" {
+        return Some(512);
+    }
+    let mut buf = [0u8; 4096];
+    let n = {
+        use std::io::Read;
+        let mut f = std::fs::File::open(path).ok()?;
+        f.read(&mut buf).ok()?
+    };
+    let b = &buf[..n];
+    match ext {
+        "png" if n >= 24 && &b[1..4] == b"PNG" => {
+            let w = u32::from_be_bytes([b[16], b[17], b[18], b[19]]);
+            let h = u32::from_be_bytes([b[20], b[21], b[22], b[23]]);
+            Some(w.min(h))
+        }
+        "ico" if n >= 6 => {
+            let count = u16::from_le_bytes([b[4], b[5]]) as usize;
+            (0..count)
+                .filter_map(|i| b.get(6 + i * 16).map(|&w| if w == 0 { 256 } else { w as u32 }))
+                .max()
+        }
+        _ => None,
+    }
+}
+
+/// How much a file looks like the project's logo (0 = not at all).
+fn logo_score(path: &Path) -> i32 {
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if !LOGO_EXTS.contains(&ext.as_str()) {
+        return 0;
+    }
+    let stem = path.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let words: Vec<&str> = stem.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    if words.iter().any(|w| TEMPLATE_LOGOS.contains(w)) {
+        return 0;
+    }
+    let base = if stem.contains("logo") {
+        100
+    } else if stem.starts_with("apple-touch-icon") || stem.starts_with("android-chrome") {
+        80
+    } else if stem == "icon" || stem.starts_with("icon-") || stem.starts_with("icon_") || stem.starts_with("app-icon") || stem.starts_with("appicon") {
+        80
+    } else if stem == "128x128@2x" || stem == "128x128" {
+        70
+    } else if stem.starts_with("favicon") {
+        60
+    } else {
+        return 0;
+    };
+    match std::fs::metadata(path) {
+        Ok(m) if m.is_file() && m.len() > 0 && m.len() <= 3 * 1024 * 1024 => {}
+        _ => return 0,
+    }
+    let size = image_size(path, &ext).unwrap_or(128);
+    if size < 32 {
+        return base / 4; // a 16px favicon is still better than nothing
+    }
+    base + (size.min(512) / 8) as i32 + if ext == "svg" { 5 } else { 0 }
+}
+
+/// Icons named in `<link rel="icon" href="…">` of the project's HTML entry pages.
+fn linked_icons(root: &Path) -> Vec<PathBuf> {
+    let re = regex::Regex::new(r#"(?is)<link\b[^>]*>"#).unwrap();
+    let rel = regex::Regex::new(r#"(?i)\brel\s*=\s*["']?[^"'>]*icon"#).unwrap();
+    let href = regex::Regex::new(r#"(?i)\bhref\s*=\s*["']([^"']+)["']"#).unwrap();
+    let mut out = Vec::new();
+    for page in ["index.html", "public/index.html", "src/index.html", "src/app.html", "app.html"] {
+        let p = root.join(page);
+        let Ok(text) = std::fs::read_to_string(&p) else { continue };
+        for tag in re.find_iter(&text).map(|m| m.as_str()) {
+            if !rel.is_match(tag) {
+                continue;
+            }
+            let Some(h) = href.captures(tag).map(|c| c[1].to_string()) else { continue };
+            if h.contains("://") || h.starts_with("data:") || h.contains("%") || h.contains("{{") {
+                continue;
+            }
+            let h = h.split(['?', '#']).next().unwrap_or("").trim_start_matches("./").trim_start_matches('/').to_string();
+            let page_dir = p.parent().unwrap_or(root).to_path_buf();
+            for base in [root.join("public"), root.join("static"), root.to_path_buf(), page_dir] {
+                let f = base.join(&h);
+                if f.is_file() {
+                    out.push(f);
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The best-looking logo, favicon or app icon of a project, or `None`.
+/// Looks in the usual folders of the project and of its `apps/*`, `packages/*` sub-projects.
+pub fn logo(project: &str) -> Option<String> {
+    let root = PathBuf::from(project);
+    const SKIP: &[&str] = &["node_modules", "vendor", "target", "dist", "out", "coverage", "tmp", "temp", "cache"];
+    let subdirs = |d: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(d)
+            .map(|rd| {
+                rd.flatten()
+                    .filter(|e| e.path().is_dir())
+                    .filter(|e| {
+                        let n = e.file_name().to_string_lossy().to_lowercase();
+                        !n.starts_with('.') && !SKIP.contains(&n.as_str())
+                    })
+                    .map(|e| e.path())
+                    .take(40)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    // the project itself, its top-level folders (client/, web/, "Source code"/…) and apps/*, packages/*
+    let mut roots: Vec<(PathBuf, i32)> = vec![(root.clone(), 10)];
+    for d in subdirs(&root) {
+        let n = d.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if n == "apps" || n == "packages" {
+            roots.extend(subdirs(&d).into_iter().map(|p| (p, 0)));
+        }
+        roots.push((d, 5));
+    }
+    let mut best: Option<(i32, PathBuf)> = None;
+    let mut consider = |p: PathBuf, bonus: i32| {
+        let s = logo_score(&p);
+        if s > 0 && best.as_ref().map_or(true, |(b, _)| s + bonus > *b) {
+            best = Some((s + bonus, p));
+        }
+    };
+    for (r, bonus) in &roots {
+        // the favicon the page really uses is the strongest hint
+        for f in linked_icons(r) {
+            consider(f, bonus + 30);
+        }
+        for d in LOGO_DIRS {
+            let Ok(rd) = std::fs::read_dir(r.join(d)) else { continue };
+            for e in rd.flatten() {
+                consider(e.path(), *bonus);
+            }
+        }
+    }
+    best.map(|(_, p)| {
+        let s = p.to_string_lossy().to_string();
+        if cfg!(windows) { s.replace('/', "\\") } else { s }
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    /// `$env:LOGO_DIRS="D:\a;D:\b"; cargo test --lib logo_live -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn logo_live() {
+        for p in std::env::var("LOGO_DIRS").unwrap_or_default().split(';').filter(|s| !s.is_empty()) {
+            println!("{p} → {:?}", super::logo(p));
+        }
+    }
+
     /// Needs a running dev server:
     /// `$env:SHOT_URL="http://localhost:5173/"; cargo test --lib shoot_live -- --ignored --nocapture`
     #[test]
