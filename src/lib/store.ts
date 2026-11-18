@@ -41,6 +41,8 @@ export interface Settings {
   showHidden: boolean;
   graphLayout: "force" | "layers";
   sidebarCollapsed: boolean;
+  /** last version whose "Что нового" the user has opened */
+  lastSeenVersion: string;
 }
 
 export interface ProcLine { html: string; stream: string }
@@ -78,6 +80,7 @@ const defaultSettings: Settings = {
   showHidden: true,
   graphLayout: "layers",
   sidebarCollapsed: false,
+  lastSeenVersion: "",
 };
 
 export const state = reactive({
@@ -470,6 +473,20 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * Auto cover: start the dev server (unless it already runs), wait for its URL,
  * take one headless-browser screenshot and stop what we started.
  */
+/** Does anything answer at `url`? (The first request also makes Next/Nuxt & co. compile the page.) */
+async function reachable(url: string): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25_000);
+  try {
+    await fetch(url, { mode: "no-cors", signal: ctrl.signal, cache: "no-store" });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function captureCover(path: string, opts: { quiet?: boolean } = {}): Promise<boolean> {
   const entry = findProject(path);
   if (!entry || state.coverBusy[entry.path]) return false;
@@ -505,19 +522,29 @@ export async function captureCover(path: string, opts: { quiet?: boolean } = {})
         await sleep(300);
       }
     }
+    // servers often print the address before they accept connections; a browser that
+    // cannot load the page exits without a screenshot, so wait until the address answers
+    const until = Date.now() + 60_000;
+    while (!(await reachable(url))) {
+      if (Date.now() > until) throw new Error(`сервер не отвечает по адресу ${url}`);
+      if (started.length && started.every((id) => state.procs[id]?.status !== "running")) {
+        throw new Error("dev-сервер завершился — посмотрите консоль");
+      }
+      await sleep(500);
+    }
     state.coverBusy[path] = "shooting";
-    // warm up: the first request makes Next/Nuxt & co. compile the page
-    await Promise.race([fetch(url, { mode: "no-cors" }).catch(() => {}), sleep(25_000)]);
     await sleep(1500);
     entry.cover = await api.coverCapture(path, url);
     if (!opts.quiet) toast(`Обложка обновлена: ${displayName(entry)}`);
     return true;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[cover] ${path}:`, msg);
     if (!opts.quiet) toast(`Скриншот «${displayName(entry)}»: ${msg}`, "error");
     return false;
   } finally {
-    for (const id of started) if (state.procs[id]?.status === "running") await stopProc(id);
+    // quietly: a stop error must not replace the screenshot result in the toast
+    for (const id of started) if (state.procs[id]?.status === "running") await api.kill(id).catch(() => {});
     delete state.coverBusy[path];
   }
 }
@@ -572,7 +599,7 @@ export async function initProcessEvents() {
     const plain = data.replace(ANSI_RE, "");
     if (!p.url) {
       const m = plain.match(URL_RE);
-      if (m) p.url = m[0].replace("0.0.0.0", "localhost").replace(/[.,;:]+$/, "");
+      if (m) p.url = m[0].replace(/0\.0\.0\.0|\[::\]/, "localhost").replace(/[.,;:]+$/, "");
     }
     p.lines.push({ html: p.ansi.ansi_to_html(data) || "&nbsp;", stream: e.payload.stream });
     if (p.lines.length > MAX_LINES) p.lines.splice(0, p.lines.length - MAX_LINES);

@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#-требования)
-[![Version](https://img.shields.io/badge/version-0.9.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
+[![Version](https://img.shields.io/badge/version-0.9.1-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
 
 [Возможности](#-возможности) · [Установка](#-установка) · [Сборка из исходников](#%EF%B8%8F-сборка-из-исходников) · [Структура](#-структура)
 

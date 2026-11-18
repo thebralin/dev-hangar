@@ -11,8 +11,10 @@ import {
 import { parentDir, baseName } from "../lib/api";
 import { relTime } from "../lib/format";
 import { host, pluginOf } from "../plugins/host";
+import { LATEST_VERSION } from "../lib/changelog";
 
-const emit = defineEmits<{ settings: [] }>();
+const emit = defineEmits<{ settings: []; whatsNew: [] }>();
+const unseen = computed(() => state.loaded && state.settings.lastSeenVersion !== LATEST_VERSION);
 const q = ref("");
 const menu = ref(false);
 const scanning = ref(false);
@@ -152,6 +154,9 @@ function dirtyCount(p: ProjectEntry) {
       >
         <Icon :name="state.settings.theme === 'dark' ? 'sun' : 'moon'" :size="16" />
       </button>
+      <button class="rbtn news" :title="unseen ? 'Что нового — есть обновления' : 'Что нового'" @click="emit('whatsNew')">
+        <Icon name="sparkles" :size="16" /><span v-if="unseen" class="ndot" />
+      </button>
       <button class="rbtn" title="Настройки" @click="emit('settings')"><Icon name="settings" :size="16" /></button>
     </div>
   </aside>
@@ -254,6 +259,9 @@ function dirtyCount(p: ProjectEntry) {
       <button class="btn sm ghost" :class="{ on: state.view === 'plugins' }" title="Плагины: свои вкладки, кнопки и инструменты" @click="toggleView('plugins')"><Icon name="puzzle" :size="14" /> Плагины</button>
       <span class="spacer" />
       <span v-if="runningCount" class="badge green" title="Запущенные процессы"><span class="dot" style="background: var(--green)" />{{ runningCount }}</span>
+      <button class="btn sm icon ghost news" :title="unseen ? 'Что нового — есть обновления' : 'Что нового'" @click="emit('whatsNew')">
+        <Icon name="sparkles" :size="14" /><span v-if="unseen" class="ndot" />
+      </button>
       <button
         class="btn sm icon ghost"
         :title="state.settings.theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'"
@@ -323,6 +331,11 @@ function dirtyCount(p: ProjectEntry) {
 .page:hover { background: var(--hover); color: var(--text); }
 .page.on { background: var(--active); color: var(--text); }
 .foot .btn.on { background: var(--active); color: var(--text); }
+.news { position: relative; }
+.ndot {
+  position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--bg-2);
+}
 .foot { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); }
 .spinner { width: 12px; height: 12px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }

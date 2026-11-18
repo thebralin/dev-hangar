@@ -4,6 +4,9 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import Sidebar from "./components/Sidebar.vue";
 import ProjectView from "./components/ProjectView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
+import WhatsNewModal from "./components/WhatsNewModal.vue";
+import { getVersion } from "@tauri-apps/api/app";
+import { LATEST_VERSION } from "./lib/changelog";
 import DiskView from "./components/DiskView.vue";
 import GridView from "./components/GridView.vue";
 import PluginsView from "./components/PluginsView.vue";
@@ -17,6 +20,14 @@ import { passports, loadPassport } from "./lib/passport";
 
 const dragging = ref(false);
 const showSettings = ref(false);
+const showWhatsNew = ref(false);
+const appVersion = ref("");
+getVersion().then((v) => (appVersion.value = v)).catch(() => {});
+
+function openWhatsNew() {
+  showWhatsNew.value = true;
+  state.settings.lastSeenVersion = LATEST_VERSION;
+}
 const dark = useDark();
 
 watchEffect(() => {
@@ -88,7 +99,7 @@ onMounted(async () => {
 
 <template>
   <div class="app">
-    <Sidebar @settings="showSettings = true" />
+    <Sidebar @settings="showSettings = true" @whats-new="openWhatsNew" />
     <main class="main">
       <GridView v-if="state.view === 'grid'" />
       <DiskView v-else-if="state.view === 'disk'" />
@@ -118,6 +129,7 @@ onMounted(async () => {
     </div>
 
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
+    <WhatsNewModal v-if="showWhatsNew" :current="appVersion" @close="showWhatsNew = false" />
 
     <transition name="toast">
       <div v-if="state.toast" class="toast" :class="state.toast.kind">{{ state.toast.text }}</div>
@@ -144,6 +156,7 @@ onMounted(async () => {
   position: fixed; bottom: 18px; right: 18px; z-index: 200;
   background: var(--panel); border: 1px solid var(--border-2); border-left: 3px solid var(--accent);
   padding: 10px 16px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.35); max-width: 460px;
+  white-space: pre-line; overflow-wrap: anywhere;
 }
 .toast.error { border-left-color: var(--red); }
 .toast-enter-active, .toast-leave-active { transition: all .2s; }

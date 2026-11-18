@@ -101,7 +101,7 @@ onBeforeUnmount(() => (batch.cancel = true));
           <Icon name="search" :size="14" class="si" />
           <input v-model="q" class="input" placeholder="Поиск проекта или стека…" />
         </div>
-        <select v-model="state.settings.sortBy" class="input sel" title="Сортировка">
+        <select v-model="state.settings.sortBy" class="input sort" title="Сортировка">
           <option value="activity">по активности</option>
           <option value="name">по имени</option>
           <option value="added">по дате добавления</option>
@@ -201,12 +201,15 @@ h1 { font-size: 19px; margin: 0; }
 .search { position: relative; width: 280px; }
 .search .input { padding-left: 30px; height: 28px; }
 .search .si { position: absolute; left: 10px; top: 7px; color: var(--text-3); }
-.sel { width: 170px; height: 28px; font-size: 12px; }
+/* not `.sel`: the selected card also has that class and was squashed to the select's size */
+.sort { width: 170px; height: 28px; font-size: 12px; }
 .small { font-size: 12px; }
 
 .cards {
   flex: 1; overflow-y: auto; padding: 18px 20px 28px;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; align-content: start;
+  /* the grid is also the scroll box with a fixed height: `auto` rows would shrink to fit it and clip the cards */
+  grid-auto-rows: max-content;
 }
 .card-p {
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; cursor: pointer;
