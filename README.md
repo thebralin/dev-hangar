@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#-требования)
-[![Version](https://img.shields.io/badge/version-0.8.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
+[![Version](https://img.shields.io/badge/version-0.9.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
 
 [Возможности](#-возможности) · [Установка](#-установка) · [Сборка из исходников](#%EF%B8%8F-сборка-из-исходников) · [Структура](#-структура)
 
@@ -37,6 +37,8 @@
 | 🐘 **PHP** | Laravel, Symfony, Yii, CodeIgniter, CakePHP, Slim, Laminas, Drupal, WordPress + Livewire, Inertia, Filament, Doctrine. Миграции, очереди, кэш, тесты (artisan / Pest / PHPUnit), линтеры (PHPStan, Pint, PHP-CS-Fixer, Psalm, Rector). |
 | 🌿 **Git** | Полноценный клиент: stage/unstage, commit/amend, fetch/pull/push, ветки, merge/rebase, разрешение конфликтов, stash, теги, cherry-pick, revert, reset, история файлов и diff. |
 | 💾 **Чекпоинты** | Снимок всех файлов (включая незакоммиченные) перед правками ИИ. Посмотреть diff и откатиться — одной кнопкой. Хранятся как скрытые refs `refs/devhangar/checkpoints/*`, не трогают ветки и stash. |
+| 🪪 **Паспорт проекта** | Описание, статус, задачи, роадмап и документация — markdown-файлами в `.hangar/` внутри репозитория. Вкладка «Паспорт»: доска задач с перетаскиванием, роадмап, документы; статус и прогресс — на карточках сетки. ИИ-агенты читают и обновляют те же файлы. Свой формат можно подключить плагином. [Формат →](docs/PASSPORT.md) |
+| ⚡ **Claude Code** | Встроенный плагин: открыть Claude в терминале проекта, отдать ему задачу из паспорта (интерактивно или без вопросов в консоли Hangar), заполнить паспорт по коду. |
 | 🤖 **Контекст для ИИ** | Стек, команды, дерево файлов, зависимости, env-переменные, git и заметки → в markdown. Скопировать в чат или сохранить как `CLAUDE.md` / `AGENTS.md`. |
 | 📍 **«Где я остановился»** | Последние коммиты, незакоммиченные и недавно изменённые файлы, TODO/FIXME, сколько дней проект не открывали. |
 | 📊 **Аналитика** | Тепловая карта коммитов, активность по неделям/месяцам/часам, серии дней, строки кода по языкам, большие и «горячие» файлы, авторы. |

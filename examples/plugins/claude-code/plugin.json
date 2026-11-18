@@ -1,0 +1,52 @@
+{
+  "id": "claude-code",
+  "name": "Claude Code",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minAppVersion": "0.9.0",
+  "description": "Запуск Claude Code из Dev Hangar: открыть в терминале, отдать задачу из паспорта проекта, заполнить паспорт по коду.",
+  "author": "Dev Hangar",
+  "icon": "zap",
+  "main": "main.js",
+  "permissions": ["projects:read", "shell"],
+  "settings": [
+    {
+      "key": "command",
+      "label": "Команда",
+      "type": "string",
+      "default": "claude",
+      "placeholder": "claude",
+      "description": "Как запускать Claude Code. Установка: npm install -g @anthropic-ai/claude-code"
+    },
+    {
+      "key": "mode",
+      "label": "Где выполнять задачи",
+      "type": "select",
+      "default": "terminal",
+      "options": [
+        { "value": "terminal", "label": "В терминале — интерактивно, можно отвечать и подтверждать" },
+        { "value": "console", "label": "В консоли Hangar — без вопросов, результат по завершении" }
+      ]
+    },
+    {
+      "key": "permissionMode",
+      "label": "Права в режиме «консоль Hangar»",
+      "type": "select",
+      "default": "acceptEdits",
+      "options": [
+        { "value": "acceptEdits", "label": "Править файлы без подтверждения (acceptEdits)" },
+        { "value": "plan", "label": "Только план, без правок (plan)" },
+        { "value": "bypassPermissions", "label": "Всё без подтверждений — осторожно (bypassPermissions)" }
+      ],
+      "description": "В консоли Hangar Claude не может задать вопрос, поэтому права задаются заранее."
+    },
+    {
+      "key": "extraArgs",
+      "label": "Доп. аргументы",
+      "type": "string",
+      "default": "",
+      "placeholder": "--model opus",
+      "description": "Добавляются к каждому запуску."
+    }
+  ]
+}

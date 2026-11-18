@@ -146,6 +146,7 @@ select.input { padding: 0 6px; }
 .badge.red { color: var(--red); background: var(--red-soft); border-color: transparent; }
 .badge.yellow { color: var(--yellow); background: var(--yellow-soft); border-color: transparent; }
 .badge.blue { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.badge.purple { color: var(--purple); border-color: var(--purple); }
 
 .muted { color: var(--text-2); }
 .dim { color: var(--text-3); }

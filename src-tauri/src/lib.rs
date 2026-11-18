@@ -257,8 +257,61 @@ fn open_in_editor(editor: String, path: String, line: Option<u32>) -> R<()> {
 }
 
 #[tauri::command]
-fn open_terminal(path: String, terminal: Option<String>) -> R<()> {
+#[allow(unused_variables)]
+fn open_terminal(path: String, terminal: Option<String>, command: Option<String>) -> R<()> {
     let term = terminal.unwrap_or_else(|| "wt".into());
+    let cmd = command.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    let command = util::command;
+    #[cfg(windows)]
+    if let Some(cmd) = cmd {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+        let console = || {
+            std::process::Command::new("cmd")
+                .creation_flags(CREATE_NEW_CONSOLE)
+                .current_dir(&path)
+                .raw_arg("/K")
+                .raw_arg(&cmd)
+                .spawn()
+        };
+        let res = match term.as_str() {
+            // `;` separates commands in Windows Terminal's command line
+            "wt" => command("wt")
+                .arg("-d")
+                .arg(&path)
+                .raw_arg("cmd /K")
+                .raw_arg(cmd.replace(';', "\\;"))
+                .spawn()
+                .or_else(|_| console()),
+            "powershell" | "pwsh" => std::process::Command::new(if term == "pwsh" { "pwsh" } else { "powershell" })
+                .creation_flags(CREATE_NEW_CONSOLE)
+                .current_dir(&path)
+                .arg("-NoExit")
+                .arg("-Command")
+                .raw_arg(&cmd)
+                .spawn()
+                .or_else(|_| console()),
+            _ => console(),
+        };
+        return res.map(|_| ()).map_err(|e| e.to_string());
+    }
+    #[cfg(not(windows))]
+    if let Some(cmd) = cmd {
+        let script = format!("{}; exec \"${{SHELL:-sh}}\"", cmd);
+        for t in ["x-terminal-emulator", "gnome-terminal", "konsole", "xterm"] {
+            let mut c = command(t);
+            c.current_dir(&path);
+            if t == "gnome-terminal" {
+                c.arg("--").arg("sh").arg("-c").arg(&script);
+            } else {
+                c.arg("-e").arg("sh").arg("-c").arg(&script);
+            }
+            if c.spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        return Err("Терминал не найден".into());
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -361,6 +414,16 @@ async fn plugin_uninstall(app: AppHandle, folder: String) -> R<()> {
 #[tauri::command]
 fn plugin_scaffold(app: AppHandle, id: String, name: String) -> R<String> {
     plugins::scaffold(&app, &id, &name)
+}
+
+#[tauri::command]
+fn bundled_plugins() -> Vec<plugins::BundledPlugin> {
+    plugins::bundled()
+}
+
+#[tauri::command]
+fn plugin_install_bundled(app: AppHandle, id: String) -> R<String> {
+    plugins::install_bundled(&app, &id)
 }
 
 #[tauri::command]
@@ -469,6 +532,8 @@ pub fn run() {
             plugin_install,
             plugin_uninstall,
             plugin_scaffold,
+            bundled_plugins,
+            plugin_install_bundled,
             exec_capture,
             write_text_file,
         ])

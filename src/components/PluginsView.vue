@@ -91,8 +91,41 @@ function onSetting(p: HostPlugin, key: string, type: string, ev: Event) {
   setSetting(p, key, v);
 }
 
+// ---------- bundled plugins (shipped with the app) ----------
+const bundled = ref<{ id: string; manifest: Record<string, any> }[]>([]);
+function newer(a: string, b: string) {
+  const pa = a.split(".").map((x) => parseInt(x, 10) || 0);
+  const pb = b.split(".").map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  return false;
+}
+const offers = computed(() =>
+  bundled.value
+    .map((b) => {
+      const inst = host.plugins.find((p) => p.folder === b.id);
+      return { ...b, update: !!inst?.manifest && newer(String(b.manifest.version), inst.manifest.version), installed: !!inst };
+    })
+    .filter((x) => !x.installed || x.update),
+);
+const installing = ref("");
+async function installBundled(id: string) {
+  installing.value = id;
+  try {
+    const was = !!state.pluginConfig.enabled[id];
+    await api.pluginInstallBundled(id);
+    await reloadPlugin(id);
+    if (was) toast(`Плагин «${host.plugins.find((p) => p.folder === id)?.manifest?.name ?? id}» обновлён`);
+    else await enablePlugin(id);
+  } catch (e) {
+    toast("Не удалось установить: " + e, "error");
+  } finally {
+    installing.value = "";
+  }
+}
+
 onMounted(() => {
   if (!host.plugins.length && !host.busy) loadPlugins();
+  api.bundledPlugins().then((b) => (bundled.value = b)).catch(() => {});
 });
 </script>
 
@@ -134,6 +167,22 @@ onMounted(() => {
     </header>
 
     <div class="list">
+      <section v-if="offers.length" class="bundled">
+        <div class="sec-h">Встроенные — ставятся одной кнопкой</div>
+        <div class="offers">
+          <div v-for="b in offers" :key="b.id" class="card offer">
+            <div class="pic"><Icon :name="b.manifest.icon || 'puzzle'" :size="18" /></div>
+            <div class="grow">
+              <div class="row"><b>{{ b.manifest.name }}</b> <span class="dim">v{{ b.manifest.version }}</span></div>
+              <div class="desc muted small">{{ b.manifest.description }}</div>
+            </div>
+            <button class="btn sm" :class="{ primary: !b.update }" :disabled="installing === b.id" @click="installBundled(b.id)">
+              <Icon name="download" :size="12" /> {{ b.update ? "Обновить" : "Установить" }}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div v-if="host.busy && !host.plugins.length" class="empty">Загрузка плагинов…</div>
       <div v-else-if="!host.plugins.length" class="empty">
         <Icon name="puzzle" :size="40" />
@@ -258,6 +307,13 @@ h1 { font-size: 19px; margin: 0; }
 .chev { transition: transform .15s; }
 .chev.open { transform: rotate(90deg); }
 .settings { display: flex; flex-direction: column; gap: 10px; padding: 10px 0 2px 50px; max-width: 560px; }
+.sec-h { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin-bottom: 8px; }
+.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+.offer { display: flex; gap: 12px; align-items: center; padding: 10px 12px; }
+.offer .pic { width: 32px; height: 32px; }
+.offer .desc { margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.small { font-size: 12px; }
+.bundled { margin-bottom: 8px; }
 .trust { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; margin-top: 6px; }
 .trust svg { flex: none; margin-top: 2px; }
 </style>

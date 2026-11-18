@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import Icon from "./Icon.vue";
@@ -9,6 +9,20 @@ import {
   captureCover, importCover, removeCover, pickActions, toast, type ProjectEntry,
 } from "../lib/store";
 import { relTime, fullDate, hueOf, initials, plural } from "../lib/format";
+import { passports, loadPassports, taskStats, currentMilestone, STATUS_LABELS } from "../lib/passport";
+
+onMounted(() => loadPassports(state.projects.map((p) => p.path)));
+
+function pass(p: ProjectEntry) {
+  return passports[p.path]?.data ?? null;
+}
+function passLine(p: ProjectEntry) {
+  const ps = pass(p);
+  if (!ps) return null;
+  const s = taskStats(ps);
+  const m = currentMilestone(ps);
+  return { ...s, pct: s.total ? Math.round((s.done / s.total) * 100) : 0, milestone: m?.title };
+}
 
 const q = ref("");
 const list = computed(() => filterProjects(q.value));
@@ -145,8 +159,10 @@ onBeforeUnmount(() => (batch.cancel = true));
         <div class="meta">
           <div class="row1">
             <span class="name ellipsis">{{ displayName(p) }}</span>
+            <span v-if="pass(p)?.status" class="badge st" :class="STATUS_LABELS[pass(p)!.status!].cls">{{ STATUS_LABELS[pass(p)!.status!].label }}</span>
             <span v-if="version(p)" class="badge ver">v{{ version(p) }}</span>
           </div>
+          <div v-if="pass(p)?.summary" class="sum ellipsis" :title="pass(p)!.summary">{{ pass(p)!.summary }}</div>
           <div class="row2">
             <template v-if="info(p)?.exists === false"><span class="badge red">папка не найдена</span></template>
             <template v-else>
@@ -157,6 +173,15 @@ onBeforeUnmount(() => (batch.cancel = true));
             <span class="when dim" :title="`Последнее обновление: ${fullDate(activityOf(p.path))}`">
               <Icon name="clock" :size="11" /> {{ relTime(activityOf(p.path)) }}
             </span>
+          </div>
+          <div
+            v-if="passLine(p)?.total"
+            class="row3"
+            :title="`Задачи: ${passLine(p)!.done} из ${passLine(p)!.total} выполнено` + (passLine(p)!.milestone ? ` · этап ${passLine(p)!.milestone}` : '')"
+          >
+            <div class="pbar"><span :style="{ width: passLine(p)!.pct + '%' }" /></div>
+            <span class="dim">{{ passLine(p)!.done }}/{{ passLine(p)!.total }}</span>
+            <span v-if="passLine(p)!.milestone" class="ms ellipsis"><Icon name="flag" :size="10" /> {{ passLine(p)!.milestone }}</span>
           </div>
         </div>
       </article>
@@ -228,6 +253,12 @@ h1 { font-size: 19px; margin: 0; }
 .dirty { color: var(--yellow); font-size: 11px; font-weight: 600; flex: none; margin-right: 4px; }
 .when { display: flex; align-items: center; gap: 4px; font-size: 11.5px; white-space: nowrap; flex: none; }
 .empty { grid-column: 1 / -1; }
+.st { flex: none; font-size: 10.5px; }
+.sum { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+.row3 { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; min-width: 0; }
+.pbar { width: 70px; flex: none; height: 4px; border-radius: 2px; background: var(--panel-2); overflow: hidden; }
+.pbar span { display: block; height: 100%; background: var(--green); }
+.ms { display: flex; align-items: center; gap: 3px; color: var(--text-3); min-width: 0; }
 .spinner { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>

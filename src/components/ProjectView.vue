@@ -13,6 +13,8 @@ import GraphTab from "./GraphTab.vue";
 import CheckpointButton from "./CheckpointButton.vue";
 import AiContextModal from "./AiContextModal.vue";
 import PluginMount from "./PluginMount.vue";
+import PassportTab from "./PassportTab.vue";
+import { passports, loadPassport, taskStats } from "../lib/passport";
 import { state, refreshBrief, runAction, stopProc, procId, displayName, toast, pickActions, type ProjectEntry } from "../lib/store";
 import { api, type Action } from "../lib/api";
 import { host, isVisible, runPluginAction, projectContextOf } from "../plugins/host";
@@ -97,6 +99,12 @@ const consoleCount = computed(
 
 const tabs = computed(() => [
   { id: "overview", label: "Обзор", icon: "info" },
+  {
+    id: "passport",
+    label: "Паспорт",
+    icon: "passport",
+    count: passports[props.entry.path]?.data ? taskStats(passports[props.entry.path].data).open || undefined : undefined,
+  },
   { id: "files", label: "Файлы", icon: "folder" },
   { id: "graph", label: "Граф", icon: "graph" },
   { id: "git", label: "Git", icon: "git", count: git.value?.isRepo ? git.value.status.length || undefined : undefined },
@@ -148,6 +156,7 @@ watch(
   () => props.entry.path,
   () => {
     if (!brief.value) refreshBrief(props.entry.path);
+    if (!passports[props.entry.path]) loadPassport(props.entry.path);
   },
   { immediate: true },
 );
@@ -253,6 +262,7 @@ watch(
       </div>
       <template v-else-if="info">
         <OverviewTab v-if="state.tab === 'overview'" :entry="entry" :info="info" :git="git" @open-file="openFile" @goto="(t: string) => (state.tab = t)" />
+        <PassportTab v-if="state.tab === 'passport'" :entry="entry" @open-file="openFile" />
         <FilesTab v-show="state.tab === 'files'" :entry="entry" :request="fileRequest" @history="showFileHistory" />
         <GraphTab v-if="state.tab === 'graph'" :entry="entry" @open-file="openFile" />
         <GitTab v-if="state.tab === 'git'" :entry="entry" :git="git" :file-request="gitFileRequest" @open-file="openFile" @clear-file="gitFileRequest = null" />

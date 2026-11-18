@@ -13,6 +13,7 @@ import Icon from "./components/Icon.vue";
 import { state, loadConfig, initProcessEvents, addProject, toast, findProject, selectProject, refreshBrief } from "./lib/store";
 import { api, parentDir } from "./lib/api";
 import { useDark } from "./lib/theme";
+import { passports, loadPassport } from "./lib/passport";
 
 const dragging = ref(false);
 const showSettings = ref(false);
@@ -65,7 +66,11 @@ onMounted(async () => {
   window.addEventListener("focus", () => {
     if (Date.now() - lastFocus < 3000) return;
     lastFocus = Date.now();
-    if (state.selected && state.view === "project") refreshBrief(state.selected);
+    if (state.selected && state.view === "project") {
+      refreshBrief(state.selected);
+      // an AI agent may have updated .hangar/ while we were away
+      if (passports[state.selected]) loadPassport(state.selected);
+    }
   });
 
   window.addEventListener("keydown", (e) => {

@@ -136,6 +136,7 @@
 | `process:start` | `{ projectPath, label, command, kind }` |
 | `process:exit` | `{ projectPath, label, command, kind, code, durationMs }` |
 | `theme:change` | `{ dark: boolean }` |
+| `passport:change` | `{ projectPath, passport }` — паспорт проекта перечитан *(с 0.9.0)* |
 
 `kind` у процессов принимает значения `dev`, `build`, `install`, `test`, `script`, `plugin` и т. д.
 
@@ -169,7 +170,7 @@
 | `toast(text, kind?)` | Всплывающее уведомление; `kind`: `"info"` или `"error"`. |
 | `confirm(message, title?): Promise<boolean>` | Диалог «ОК / Отмена». |
 | `openFile(path, line?)` | Открыть файл на вкладке «Файлы» текущего проекта. |
-| `showTab(id)` | Переключить вкладку: встроенную (`overview`, `files`, `graph`, `git`, `analytics`, `deps`, `console`) или свою по её `id`. |
+| `showTab(id)` | Переключить вкладку: встроенную (`overview`, `passport`, `files`, `graph`, `git`, `analytics`, `deps`, `console`) или свою по её `id`. |
 | `showPage(id)` | Открыть свой экран, зарегистрированный через `pages.register`. |
 | `openUrl(url)` | Открыть ссылку в браузере. |
 | `openInEditor(path, line?)` | Открыть файл или папку в IDE пользователя. |
@@ -219,8 +220,58 @@
 |---|---|
 | `exec(cwd, command, { timeoutMs? }): Promise<ExecResult>` | Выполнить команду и получить `{ code, stdout, stderr, timedOut }`. Таймаут по умолчанию — 60 с, по истечении процесс останавливается. |
 | `run(projectPath, command, { label?, cwd? })` | Запустить команду во вкладке «Консоль» проекта: с живым выводом, остановкой и перезапуском. |
+| `openTerminal(cwd, command?)` | Открыть внешний терминал из настроек Hangar в папке и выполнить команду. Для интерактивных программ (Claude Code, aider…), которым нужен настоящий терминал. *(с 0.9.0)* |
 
-Команды выполняются через `cmd /C` (Windows) с UTF-8 выводом.
+Команды выполняются через `cmd /C` (Windows) с UTF-8 выводом. Консоль Hangar — не терминал: ввод
+программе приходит через pipe, поэтому программы, которые читают stdin до конца (например, `claude -p`),
+запускайте с `< nul` (Windows) / `< /dev/null`.
+
+## hangar.passport <a id="passport"></a> *(с 0.9.0)*
+
+Паспорт проекта — описание, статус, задачи, роадмап и документы в файлах репозитория
+(вкладка «Паспорт»). Встроенный формат — папка `.hangar/`
+([описание формата](../PASSPORT.md)); плагин может добавить свой формат или кнопки у задач.
+
+| | |
+|---|---|
+| `get(projectPath): Promise<Passport \| null>` 🔒 `projects:read` | Прочитать паспорт; `null` — его нет. |
+| `refresh(projectPath)` | Перечитать паспорт и обновить интерфейс. |
+| `taskPrompt(projectPath, task)` 🔒 `projects:read` | Промпт для ИИ-агента: взять задачу, работать по паспорту, отметить её и обновить «Сейчас». |
+| `fillPrompt(projectPath)` 🔒 `projects:read` | Промпт «заполни паспорт по коду проекта». |
+| `registerFormat(format): Disposable` | Свой формат хранения (см. ниже). Форматы плагинов проверяются раньше встроенного. |
+| `registerTaskAction(action): Disposable` | Кнопка у каждой задачи на доске: `{ id, label, icon?, title?, when?(task, project), run(project, task, passport) }`. |
+
+Событие `passport:change` — `{ projectPath, passport }` — приходит после каждого перечитывания.
+
+### Свой формат
+
+Если у вас уже есть своя структура (Notion-экспорт, `TODO.md` в корне, `docs/status.yml`…), не нужно
+переезжать на `.hangar/` — опишите формат, и Hangar покажет его на той же вкладке:
+
+```js
+hangar.passport.registerFormat({
+  id: "todo-md",
+  label: "TODO.md в корне",
+  detect: (ctx) => ctx.has("TODO.md"),
+  async read(ctx) {
+    const text = (await ctx.readText("TODO.md")) ?? "";
+    const tasks = [...text.matchAll(/^- \[( |x)\] (.+)$/gm)].map((m, i) => ({
+      id: String(i), text: m[2], raw: m[0], done: m[1] === "x", section: "TODO", tags: [],
+    }));
+    return {
+      tags: [], description: "", now: "",
+      sections: [{ title: "TODO", tasks }],
+      roadmap: [], docs: [],
+      files: { tasks: ctx.abs("TODO.md") },
+    };
+  },
+  // необязательно: init, setTaskDone, addTask, moveTask, setStatus —
+  // без них вкладка работает только на чтение. Запись через ctx.writeText требует "fs:write".
+});
+```
+
+`ctx` (`PassportContext`) работает только внутри папки проекта: `has`, `readText`, `list`, `writeText`, `abs`.
+Полные типы — `Passport`, `PassportTask`, `PassportFormat` в `hangar.d.ts`.
 
 ## hangar.util
 

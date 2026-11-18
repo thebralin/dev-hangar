@@ -163,6 +163,62 @@ pub fn uninstall(app: &AppHandle, folder: &str) -> Result<(), String> {
     std::fs::remove_dir_all(&p).map_err(|e| e.to_string())
 }
 
+// ───────── bundled plugins: shipped inside the app, installed with one click ─────────
+
+macro_rules! bundled_file {
+    ($id:literal, $f:literal) => {
+        ($f, include_str!(concat!("../../examples/plugins/", $id, "/", $f)))
+    };
+}
+
+const BUNDLED: &[(&str, &[(&str, &str)])] = &[
+    ("claude-code", &[bundled_file!("claude-code", "plugin.json"), bundled_file!("claude-code", "main.js")]),
+    ("release-checklist", &[bundled_file!("release-checklist", "plugin.json"), bundled_file!("release-checklist", "main.js")]),
+    (
+        "npm-outdated",
+        &[bundled_file!("npm-outdated", "plugin.json"), bundled_file!("npm-outdated", "main.js"), bundled_file!("npm-outdated", "style.css")],
+    ),
+    ("projects-dashboard", &[bundled_file!("projects-dashboard", "plugin.json"), bundled_file!("projects-dashboard", "main.js")]),
+    ("hugo-stack", &[bundled_file!("hugo-stack", "plugin.json"), bundled_file!("hugo-stack", "main.js")]),
+];
+
+#[derive(Serialize)]
+pub struct BundledPlugin {
+    pub id: String,
+    pub manifest: serde_json::Value,
+}
+
+pub fn bundled() -> Vec<BundledPlugin> {
+    BUNDLED
+        .iter()
+        .filter_map(|(id, files)| {
+            let m = files.iter().find(|(f, _)| *f == MANIFEST)?.1;
+            Some(BundledPlugin { id: id.to_string(), manifest: serde_json::from_str(m).ok()? })
+        })
+        .collect()
+}
+
+/// Write a bundled plugin into the plugins dir (install or update to the shipped version).
+pub fn install_bundled(app: &AppHandle, id: &str) -> Result<String, String> {
+    let (_, files) = BUNDLED.iter().find(|(x, _)| *x == id).ok_or(format!("Нет встроенного плагина {}", id))?;
+    let root = dir(app)?;
+    let tmp = root.join(format!(".installing-{}", id));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    for (f, content) in files.iter() {
+        // examples import types from the repo; installed plugins get their own copy
+        let content = content.replace("../../../src/plugins/hangar", "./hangar");
+        std::fs::write(tmp.join(f), content).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(tmp.join("hangar.d.ts"), include_str!("../../src/plugins/hangar.d.ts")).map_err(|e| e.to_string())?;
+    let dst = root.join(id);
+    if dst.exists() {
+        std::fs::remove_dir_all(&dst).map_err(|e| format!("Не удалось заменить старую версию: {}", e))?;
+    }
+    std::fs::rename(&tmp, &dst).map_err(|e| e.to_string())?;
+    Ok(id.to_string())
+}
+
 /// Create a starter plugin from the built-in template.
 pub fn scaffold(app: &AppHandle, id: &str, name: &str) -> Result<String, String> {
     if !valid_id(id) {

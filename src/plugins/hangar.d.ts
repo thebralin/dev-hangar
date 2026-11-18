@@ -233,6 +233,116 @@ export interface StackContribution {
   dependencies?(ctx: StackDetectContext): StackDependency[] | Promise<StackDependency[]>;
 }
 
+// ───────────────────────────── passport ─────────────────────────────
+// «Паспорт проекта»: описание, статус, задачи, роадмап и документация в файлах репозитория.
+// Встроенный формат — папка `.hangar/`; плагин может добавить свой (passport.registerFormat).
+
+export type ProjectStatus = "idea" | "active" | "paused" | "done" | "archived";
+
+export interface PassportTask {
+  /** стабильный в пределах файла id (раздел + текст) */
+  id: string;
+  /** текст без тегов и приоритета */
+  text: string;
+  /** строка как в файле — для поиска при правках */
+  raw: string;
+  done: boolean;
+  /** раздел (колонка доски), например «В работе» */
+  section: string;
+  tags: string[];
+  priority?: "high" | "low";
+  /** текст под задачей (строки с отступом) */
+  note?: string;
+  /** номер строки в файле (0-based), если формат его знает */
+  line?: number;
+}
+
+export interface PassportSection { title: string; tasks: PassportTask[] }
+
+export interface PassportMilestone {
+  title: string;
+  /** "0.9.0", если заголовок начинается с версии */
+  version?: string;
+  status: "planned" | "active" | "done";
+  /** markdown без пунктов-чекбоксов */
+  body: string;
+  items: { text: string; done: boolean }[];
+}
+
+export interface PassportDoc {
+  title: string;
+  /** абсолютный путь */
+  path: string;
+}
+
+export interface Passport {
+  /** id формата, который прочитал паспорт */
+  format: string;
+  formatLabel: string;
+  name?: string;
+  status?: ProjectStatus;
+  /** одна строка о проекте */
+  summary?: string;
+  tags: string[];
+  /** описание (markdown) */
+  description: string;
+  /** «Сейчас»: что в работе, на чём остановились (markdown) */
+  now: string;
+  sections: PassportSection[];
+  roadmap: PassportMilestone[];
+  docs: PassportDoc[];
+  /** абсолютные пути файлов, чтобы открыть их в редакторе */
+  files: { project?: string; tasks?: string; roadmap?: string; docs?: string; readme?: string };
+  /** какие правки поддерживает формат */
+  editable: { tasks: boolean; status: boolean };
+}
+
+/** Доступ формата к файлам проекта. Пути — относительно корня проекта, выйти за него нельзя. */
+export interface PassportContext {
+  projectPath: string;
+  /** отображаемое имя проекта */
+  name: string;
+  has(rel: string): Promise<boolean>;
+  readText(rel: string): Promise<string | null>;
+  list(rel?: string): Promise<DirEntry[]>;
+  /** запись — требует разрешение "fs:write" (для встроенного формата не нужно) */
+  writeText(rel: string, content: string): Promise<void>;
+  /** абсолютный путь */
+  abs(rel: string): string;
+}
+
+/** То, что возвращает PassportFormat.read: всё, кроме полей, которые заполняет Hangar. */
+export type PassportData = Omit<Passport, "format" | "formatLabel" | "editable">;
+
+export interface PassportSeed { name: string; summary: string; stacks: string[]; version?: string | null }
+
+export interface PassportFormat {
+  /** уникален в пределах плагина */
+  id: string;
+  label: string;
+  description?: string;
+  /** есть ли паспорт этого формата в проекте */
+  detect(ctx: PassportContext): boolean | Promise<boolean>;
+  read(ctx: PassportContext): PassportData | Promise<PassportData>;
+  /** создать пустой паспорт (кнопка «Создать паспорт») */
+  init?(ctx: PassportContext, seed: PassportSeed): void | Promise<void>;
+  setTaskDone?(ctx: PassportContext, task: PassportTask, done: boolean): void | Promise<void>;
+  addTask?(ctx: PassportContext, section: string, text: string): void | Promise<void>;
+  moveTask?(ctx: PassportContext, task: PassportTask, section: string): void | Promise<void>;
+  setStatus?(ctx: PassportContext, status: ProjectStatus): void | Promise<void>;
+}
+
+/** Кнопка у задачи на вкладке «Паспорт» (например, «Отдать агенту»). */
+export interface TaskActionContribution {
+  id: string;
+  label: string;
+  icon?: string;
+  title?: string;
+  /** показывать только для части задач */
+  when?: (task: PassportTask, project: ProjectContext) => boolean;
+  run(project: ProjectContext, task: PassportTask, passport: Passport): void | Promise<void>;
+}
+
 export interface HangarEvents {
   /** пользователь открыл проект */
   "project:open": ProjectContext;
@@ -242,6 +352,8 @@ export interface HangarEvents {
   "process:exit": { projectPath: string; label: string; command: string; kind: string; code: number | null; durationMs: number };
   /** сменилась тема */
   "theme:change": { dark: boolean };
+  /** паспорт проекта перечитан (после правки в Hangar или возврата в окно) */
+  "passport:change": { projectPath: string; passport: Passport | null };
 }
 
 // ───────────────────────────── API ─────────────────────────────
@@ -359,6 +471,30 @@ export interface Hangar {
     exec(cwd: string, command: string, opts?: { timeoutMs?: number }): Promise<ExecResult>;
     /** запустить команду во вкладке «Консоль» проекта */
     run(projectPath: string, command: string, opts?: { label?: string; cwd?: string }): Promise<void>;
+    /**
+     * Открыть внешний терминал (из настроек Hangar) в папке и, если задано, выполнить команду.
+     * Для интерактивных программ (Claude Code, aider, …), которым нужен настоящий терминал.
+     */
+    openTerminal(cwd: string, command?: string): Promise<void>;
+  };
+
+  /** Паспорт проекта (вкладка «Паспорт»). */
+  passport: {
+    /** прочитать паспорт проекта; null — паспорта нет. Требует "projects:read" */
+    get(projectPath: string): Promise<Passport | null>;
+    /** перечитать паспорт и обновить интерфейс */
+    refresh(projectPath: string): Promise<void>;
+    /**
+     * Готовый промпт для ИИ-агента: взять задачу, работать по паспорту, отметить её и обновить «Сейчас».
+     * Требует "projects:read"
+     */
+    taskPrompt(projectPath: string, task: PassportTask): Promise<string>;
+    /** промпт «заполни паспорт по коду проекта» */
+    fillPrompt(projectPath: string): Promise<string>;
+    /** свой формат хранения паспорта; форматы плагинов проверяются раньше встроенного `.hangar/` */
+    registerFormat(format: PassportFormat): Disposable;
+    /** кнопка у каждой задачи */
+    registerTaskAction(action: TaskActionContribution): Disposable;
   };
 
   util: {

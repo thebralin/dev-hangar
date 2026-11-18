@@ -22,6 +22,7 @@ import {
 } from "../lib/store";
 import { relTime, size, STACK_COLORS } from "../lib/format";
 import { ICONS, iconSvg } from "../lib/icons";
+import { fillPrompt, loadPassport, passportHost, passports, taskPrompt } from "../lib/passport";
 import * as bus from "./bus";
 
 export const API_VERSION = 1;
@@ -35,7 +36,7 @@ export const PERMISSIONS: Record<Permission, string> = {
 };
 
 /** Built-in project tabs (plugins may switch to them with ui.showTab). */
-export const BUILTIN_TABS = ["overview", "files", "graph", "git", "analytics", "deps", "console"];
+export const BUILTIN_TABS = ["overview", "passport", "files", "graph", "git", "analytics", "deps", "console"];
 
 export type PluginStatus = "disabled" | "active" | "loading" | "error" | "invalid";
 
@@ -430,6 +431,48 @@ function createApi(p: HostPlugin, rt: Runtime): Hangar {
           kind: "plugin",
         });
       },
+      async openTerminal(cwd, command) {
+        need("shell");
+        await api.openTerminal(cwd, state.settings.terminal, command || undefined);
+      },
+    },
+
+    passport: {
+      async get(projectPath) {
+        need("projects:read");
+        const s = passports[projectPath];
+        return clone(s?.data && !s.loading ? s.data : await loadPassport(projectPath));
+      },
+      async refresh(projectPath) {
+        await loadPassport(projectPath);
+      },
+      async taskPrompt(projectPath, task) {
+        need("projects:read");
+        return taskPrompt(projectPath, task);
+      },
+      async fillPrompt(projectPath) {
+        need("projects:read");
+        return fillPrompt(projectPath);
+      },
+      registerFormat(format) {
+        if (!format?.id || !format.label || typeof format.detect !== "function" || typeof format.read !== "function")
+          throw new Error("passport.registerFormat: нужны id, label, detect() и read()");
+        const key = `${id}:${format.id}`;
+        if (passportHost.formats.some((f) => f.key === key)) throw new Error(`passport.registerFormat: формат "${format.id}" уже зарегистрирован`);
+        passportHost.formats.push(markRaw({ key, pluginId: id, format: markRaw({ ...format }), canWrite: perms.has("fs:write") }));
+        return track(() => {
+          passportHost.formats = passportHost.formats.filter((f) => f.key !== key);
+        });
+      },
+      registerTaskAction(action) {
+        if (!action?.id || !action.label || typeof action.run !== "function") throw new Error("passport.registerTaskAction: нужны id, label и run()");
+        const key = `${id}:${action.id}`;
+        if (passportHost.taskActions.some((a) => a.key === key)) throw new Error(`passport.registerTaskAction: "${action.id}" уже зарегистрирована`);
+        passportHost.taskActions.push(markRaw({ key, pluginId: id, pluginName: m.name, action: markRaw({ ...action }) }));
+        return track(() => {
+          passportHost.taskActions = passportHost.taskActions.filter((a) => a.key !== key);
+        });
+      },
     },
 
     util: {
@@ -643,6 +686,8 @@ async function deactivate(p: HostPlugin) {
   host.tabs = host.tabs.filter((t) => t.pluginId !== p.folder);
   host.actions = host.actions.filter((a) => a.pluginId !== p.folder);
   host.pages = host.pages.filter((a) => a.pluginId !== p.folder);
+  passportHost.formats = passportHost.formats.filter((f) => f.pluginId !== p.folder);
+  passportHost.taskActions = passportHost.taskActions.filter((a) => a.pluginId !== p.folder);
   if (host.stacks.some((s) => s.pluginId === p.folder)) {
     host.stacks = host.stacks.filter((s) => s.pluginId !== p.folder);
     scheduleReenrich();
