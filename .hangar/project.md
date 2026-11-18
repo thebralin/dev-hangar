@@ -3,7 +3,7 @@ format: hangar/1
 name: Dev Hangar
 status: active
 summary: Десктоп-ангар для всех dev-проектов — стек, запуск, git, аналитика и паспорт проекта для ИИ
-tags: tauri, vue, rust, desktop
+tags: tauri, vue, rust, desktop, typescript, windows, plugins, ai
 ---
 
 # Dev Hangar
@@ -18,7 +18,29 @@ tags: tauri, vue, rust, desktop
 - Бэкенд: `src-tauri/src/` — анализ проектов, git, процессы, файлы, плагины, обложки.
 - Паспорт проекта: формат и правки — `src/lib/passport-format.ts`, загрузка и реестр — `src/lib/passport.ts`.
 
+**Для кого:** разработчик, у которого много локальных проектов на разных стеках (JS/TS, Rust, Go, Python, PHP, .NET…),
+и который работает с ИИ-агентами (Claude Code, Cursor, Codex). Целевая платформа — Windows 10/11
+(установщики NSIS/MSI; в Rust есть ветки и для других ОС, но README заявляет Windows).
+
+**Что умеет** (по README): добавление проектов перетаскиванием и поиском вложенных папок, определение стека
+и монореп, Dev/Build в один клик с консолью и вводом в stdin, PHP-инструменты, полноценный git-клиент,
+чекпоинты перед правками ИИ, «Где я остановился» (коммиты, изменённые файлы, TODO/FIXME), аналитика,
+граф импортов, файлы с поиском и подсветкой, уборка диска, зависимости, сетка проектов с обложками,
+паспорт проекта, контекст для ИИ (`CLAUDE.md` / `AGENTS.md`), плагины на JavaScript.
+
+**Как устроено:** Rust-команды Tauri (`src-tauri/src/lib.rs`) выполняют всю работу с диском, git и процессами;
+Vue-фронтенд вызывает их через `src/lib/api.ts`. Настройки — `%APPDATA%\com.bolat.devhangar\config.json`.
+Подробнее — [docs/architecture.md](docs/architecture.md), ключевые решения — [docs/decisions.md](docs/decisions.md).
+Для авторов плагинов — `docs/plugins/README.md` и `docs/plugins/API.md`; формат паспорта — `docs/PASSPORT.md`.
+
+Сборка: `npm install`, `npm run app:dev` (разработка), `npm run app:build` (установщик).
+Автотестов в репозитории нет; `npm run build` делает проверку типов (`vue-tsc --noEmit`).
+
 ## Сейчас
 
 0.9.0 — режим ИИ: паспорт проекта (`.hangar/`), вкладка «Паспорт», статус и прогресс на карточках сетки,
 Plugin API `hangar.passport` и встроенный плагин Claude Code. Код готов, ждёт ручного тестирования вместе с 0.8.0.
+
+По git: последний коммит `0b046fc` (2026-11-18) — «Dev Hangar v0.9.0: project passport and AI mode», рабочее дерево
+чистое. Версия 0.9.0 проставлена в `package.json`, `Cargo.toml`, `tauri.conf.json`, README.
+TODO/FIXME в коде не найдено. Следующий этап роадмапа — 1.0.0 (стабилизация и релиз), конкретных пунктов пока нет.
