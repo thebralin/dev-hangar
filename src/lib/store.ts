@@ -26,6 +26,10 @@ export interface ProjectEntry {
   prevOpenedAt?: number;
   notes?: string;
   customCommands?: CustomCommand[];
+  /** cover image for the grid view (absolute path inside the app's covers folder) */
+  cover?: string;
+  /** commands typed in the console, newest last */
+  cmdHistory?: string[];
 }
 
 export interface Settings {
@@ -36,6 +40,7 @@ export interface Settings {
   sortBy: "activity" | "name" | "added";
   showHidden: boolean;
   graphLayout: "force" | "layers";
+  sidebarCollapsed: boolean;
 }
 
 export interface ProcLine { html: string; stream: string }
@@ -72,6 +77,7 @@ const defaultSettings: Settings = {
   sortBy: "activity",
   showHidden: true,
   graphLayout: "layers",
+  sidebarCollapsed: false,
 };
 
 export const state = reactive({
@@ -87,10 +93,30 @@ export const state = reactive({
   toast: null as null | { text: string; kind: "info" | "error" },
   detectedEditors: [] as string[],
   collapsedGroups: {} as Record<string, boolean>,
-  view: "project" as "project" | "disk" | "plugins" | `page:${string}`,
+  view: "project" as "project" | "grid" | "disk" | "plugins" | `page:${string}`,
   pluginConfig: { enabled: {}, data: {}, settings: {} } as PluginsConfig,
   checkpoints: {} as Record<string, Checkpoint[]>,
+  /** projectPath → what the cover screenshot is doing right now */
+  coverBusy: {} as Record<string, "starting" | "waiting" | "shooting">,
 });
+
+/** Search + sort used by the sidebar and the grid (pinned first). */
+export function filterProjects(query: string): ProjectEntry[] {
+  const s = query.trim().toLowerCase();
+  const list = state.projects.filter((p) => {
+    if (!s) return true;
+    const b = state.briefs[p.path];
+    const hay = [displayName(p), p.path, ...(b?.info?.stacks.map((x) => x.label) ?? [])].join(" ").toLowerCase();
+    return s.split(/\s+/).every((part) => hay.includes(part));
+  });
+  const by = state.settings.sortBy;
+  return list.sort((a, b) => {
+    if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+    if (by === "name") return displayName(a).localeCompare(displayName(b));
+    if (by === "added") return b.addedAt - a.addedAt;
+    return activityOf(b.path) - activityOf(a.path);
+  });
+}
 
 export async function loadCheckpoints(projectPath: string) {
   try {
@@ -181,6 +207,7 @@ export async function addProject(path: string, select = true) {
 }
 
 export function removeProject(path: string) {
+  if (findProject(path)?.cover) api.coverRemove(path).catch(() => {});
   state.projects = state.projects.filter((p) => norm(p.path) !== norm(path));
   delete state.briefs[path];
   if (state.selected && norm(state.selected) === norm(path)) state.selected = state.projects[0]?.path ?? null;
@@ -312,7 +339,23 @@ export function procId(projectPath: string, actionId: string) {
   return `${projectPath}::${actionId}`;
 }
 
-export async function runAction(projectPath: string, action: Action | CustomCommand, labelPrefix = "") {
+/** Dev/Build actions of a project: the root one, or (monorepo) the subprojects' ones. */
+export function pickActions(info: ProjectInfo | undefined, kind: string): Action[] {
+  if (!info) return [];
+  const root = info.root.actions.find((a) => a.kind === kind);
+  if (root) return [root];
+  const subs = info.subprojects.map((m) => m.actions.find((a) => a.kind === kind)).filter(Boolean) as Action[];
+  // for dev: run all subproject dev servers; for build: only the first
+  return kind === "dev" ? subs : subs.slice(0, 1);
+}
+
+export async function runAction(
+  projectPath: string,
+  action: Action | CustomCommand,
+  labelPrefix = "",
+  opts: { focus?: boolean } = {},
+) {
+  const focus = opts.focus !== false;
   const kind = (action as Action).kind || (action as CustomCommand).kind || "script";
   const cwd = joinPath(projectPath, action.cwd || "");
   if (kind === "open") {
@@ -326,9 +369,11 @@ export async function runAction(projectPath: string, action: Action | CustomComm
   const id = procId(projectPath, action.id);
   const existing = state.procs[id];
   if (existing?.status === "running") {
-    state.activeProc[projectPath] = id;
-    state.tab = "console";
-    toast("Уже запущено");
+    if (focus) {
+      state.activeProc[projectPath] = id;
+      state.tab = "console";
+      toast("Уже запущено");
+    }
     return;
   }
   const proc: Proc = {
@@ -347,8 +392,8 @@ export async function runAction(projectPath: string, action: Action | CustomComm
   proc.lines.push({ html: `<span class="sys">$ ${escapeHtml(action.command)}   <span class="dim">(${escapeHtml(cwd)})</span></span>`, stream: "sys" });
   state.procs[id] = proc;
   if (!state.procOrder.includes(id)) state.procOrder.push(id);
-  state.activeProc[projectPath] = id;
-  state.tab = "console";
+  if (focus || !state.activeProc[projectPath]) state.activeProc[projectPath] = id;
+  if (focus) state.tab = "console";
   emit("process:start", { projectPath, label: proc.label, command: proc.command, kind });
   try {
     await api.run(id, cwd, action.command);
@@ -384,6 +429,114 @@ export async function restartProc(id: string) {
   }
   const actionId = id.slice(p.projectPath.length + 2);
   await runAction(p.projectPath, { id: actionId, label: p.label, command: p.command, cwd: p.cwd.slice(p.projectPath.length).replace(/^[\\/]+/, ""), kind: p.kind });
+}
+
+// ---------------- console input ----------------
+
+let shellSeq = 0;
+
+/** Remember a typed line in the project's console history (no duplicates, last 50). */
+export function pushHistory(entry: ProjectEntry, line: string) {
+  const h = (entry.cmdHistory ?? []).filter((x) => x !== line);
+  h.push(line);
+  entry.cmdHistory = h.slice(-50);
+}
+
+/** Run a command typed in the console, in the project folder. */
+export async function runShell(projectPath: string, command: string) {
+  const cmd = command.trim();
+  if (!cmd) return;
+  const label = cmd.length > 32 ? cmd.slice(0, 31) + "…" : cmd;
+  await runAction(projectPath, { id: `shell-${Date.now()}-${++shellSeq}`, label, command: cmd, kind: "shell" });
+}
+
+/** Send a line to a running process' stdin. */
+export async function sendInput(id: string, text: string) {
+  const p = state.procs[id];
+  if (!p || p.status !== "running") return;
+  p.lines.push({ html: `<span class="sys">› ${escapeHtml(text) || "&nbsp;"}</span>`, stream: "stdin" });
+  try {
+    await api.writeStdin(id, text + "\n");
+  } catch (e) {
+    p.lines.push({ html: `<span class="err">${escapeHtml(String(e))}</span>`, stream: "sys" });
+  }
+}
+
+// ---------------- covers ----------------
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Auto cover: start the dev server (unless it already runs), wait for its URL,
+ * take one headless-browser screenshot and stop what we started.
+ */
+export async function captureCover(path: string, opts: { quiet?: boolean } = {}): Promise<boolean> {
+  const entry = findProject(path);
+  if (!entry || state.coverBusy[entry.path]) return false;
+  path = entry.path;
+  const started: string[] = [];
+  state.coverBusy[path] = "starting";
+  try {
+    const info = state.briefs[path]?.info ?? (await analyzeProject(path));
+    if (!info.exists) throw new Error("папка не найдена");
+    const live = () =>
+      Object.values(state.procs).find((p) => p.projectPath === path && p.status === "running" && p.url)?.url;
+    let url = live();
+    if (!url) {
+      const dev = pickActions(info, "dev");
+      if (!dev.length) throw new Error("нет dev-команды — выберите картинку вручную");
+      const mods = [info.root, ...info.subprojects];
+      if (dev.some((a) => mods.find((m) => (m.relPath || "") === (a.cwd || ""))?.needsInstall)) {
+        throw new Error("сначала установите зависимости (Install)");
+      }
+      for (const a of dev) {
+        const id = procId(path, a.id);
+        if (state.procs[id]?.status === "running") continue;
+        await runAction(path, a, a.cwd || "", { focus: false });
+        started.push(id);
+      }
+      state.coverBusy[path] = "waiting";
+      const until = Date.now() + 90_000;
+      while (!(url = live())) {
+        if (Date.now() > until) throw new Error("dev-сервер не показал адрес за 90 секунд");
+        if (started.length && started.every((id) => state.procs[id]?.status !== "running")) {
+          throw new Error("dev-сервер завершился — посмотрите консоль");
+        }
+        await sleep(300);
+      }
+    }
+    state.coverBusy[path] = "shooting";
+    // warm up: the first request makes Next/Nuxt & co. compile the page
+    await Promise.race([fetch(url, { mode: "no-cors" }).catch(() => {}), sleep(25_000)]);
+    await sleep(1500);
+    entry.cover = await api.coverCapture(path, url);
+    if (!opts.quiet) toast(`Обложка обновлена: ${displayName(entry)}`);
+    return true;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!opts.quiet) toast(`Скриншот «${displayName(entry)}»: ${msg}`, "error");
+    return false;
+  } finally {
+    for (const id of started) if (state.procs[id]?.status === "running") await stopProc(id);
+    delete state.coverBusy[path];
+  }
+}
+
+export async function importCover(path: string, src: string) {
+  const entry = findProject(path);
+  if (!entry) return;
+  try {
+    entry.cover = await api.coverImport(entry.path, src);
+  } catch (e) {
+    toast("Не удалось поставить картинку: " + e, "error");
+  }
+}
+
+export async function removeCover(path: string) {
+  const entry = findProject(path);
+  if (!entry) return;
+  entry.cover = undefined;
+  await api.coverRemove(entry.path).catch(() => {});
 }
 
 export function closeProc(id: string) {

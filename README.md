@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#-требования)
-[![Version](https://img.shields.io/badge/version-0.7.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
+[![Version](https://img.shields.io/badge/version-0.8.0-blueviolet)](https://github.com/thebralin/dev-hangar/releases)
 
 [Возможности](#-возможности) · [Установка](#-установка) · [Сборка из исходников](#%EF%B8%8F-сборка-из-исходников) · [Структура](#-структура)
 
@@ -30,9 +30,10 @@
 
 | | |
 |---|---|
-| 📂 **Проекты** | Drag & drop папки, кнопка «+» или «Найти проекты в папке…» — вложенные проекты находятся сами (до 2 уровней). |
+| 📂 **Проекты** | Drag & drop папки, кнопка «+» или «Найти проекты в папке…» — вложенные проекты находятся сами (до 2 уровней). Боковую панель можно свернуть в узкую полосу с аватарками (`Ctrl+B`). |
+| 🖼️ **Сетка проектов** | Все проекты карточками: обложка, имя, версия, стек, дата последнего обновления. Обложка — своя картинка или автоскриншот: Hangar сам запускает dev, снимает страницу headless-браузером (Edge / Chrome) и останавливает сервер. Можно сразу для всех проектов без картинки. |
 | 🧠 **Определение стека** | Vue, Nuxt, Astro, React, Next, Svelte, Express, Hono, Fastify, Elysia, Nest, Electron, Tauri, Node, Bun, Deno, HTML/JS, Rust, Go, Python/Django, PHP, .NET, Java/Gradle, Flutter, CMake, Docker. Монорепы разбираются по модулям. |
-| ▶️ **Запуск в один клик** | **Dev** и **Build**, менеджер пакетов (npm / bun / pnpm / yarn) определяется по lock-файлу. В монорепе Dev поднимает все серверы сразу. Цветная консоль, автопоиск URL, остановка убивает всё дерево процессов. |
+| ▶️ **Запуск в один клик** | **Dev** и **Build**, менеджер пакетов (npm / bun / pnpm / yarn) определяется по lock-файлу. В монорепе Dev поднимает все серверы сразу. Цветная консоль, автопоиск URL, остановка убивает всё дерево процессов. В консоли можно печатать: ответить запущенному процессу (stdin) или выполнить любую команду в папке проекта, с историей по `↑`. |
 | 🐘 **PHP** | Laravel, Symfony, Yii, CodeIgniter, CakePHP, Slim, Laminas, Drupal, WordPress + Livewire, Inertia, Filament, Doctrine. Миграции, очереди, кэш, тесты (artisan / Pest / PHPUnit), линтеры (PHPStan, Pint, PHP-CS-Fixer, Psalm, Rector). |
 | 🌿 **Git** | Полноценный клиент: stage/unstage, commit/amend, fetch/pull/push, ветки, merge/rebase, разрешение конфликтов, stash, теги, cherry-pick, revert, reset, история файлов и diff. |
 | 💾 **Чекпоинты** | Снимок всех файлов (включая незакоммиченные) перед правками ИИ. Посмотреть diff и откатиться — одной кнопкой. Хранятся как скрытые refs `refs/devhangar/checkpoints/*`, не трогают ветки и stash. |

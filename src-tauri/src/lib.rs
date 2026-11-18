@@ -1,5 +1,6 @@
 mod analytics;
 mod checkpoints;
+mod covers;
 mod detect;
 mod extra;
 mod files;
@@ -203,6 +204,28 @@ fn kill_command(app: AppHandle, id: String) -> R<()> {
 #[tauri::command]
 fn running_commands(app: AppHandle) -> Vec<String> {
     process::running(&app)
+}
+
+#[tauri::command]
+async fn write_stdin(app: AppHandle, id: String, data: String) -> R<()> {
+    blocking(move || process::write_stdin(&app, &id, &data)).await
+}
+
+// ---------- covers ----------
+
+#[tauri::command]
+async fn cover_capture(app: AppHandle, project: String, url: String, width: Option<u32>, height: Option<u32>) -> R<String> {
+    blocking(move || covers::capture(&app, &project, &url, width.unwrap_or(1280), height.unwrap_or(800))).await
+}
+
+#[tauri::command]
+async fn cover_import(app: AppHandle, project: String, src: String) -> R<String> {
+    blocking(move || covers::import(&app, &project, &src)).await
+}
+
+#[tauri::command]
+fn cover_remove(app: AppHandle, project: String) -> R<()> {
+    covers::remove(&app, &project)
 }
 
 // ---------- external apps ----------
@@ -415,6 +438,10 @@ pub fn run() {
             run_command,
             kill_command,
             running_commands,
+            write_stdin,
+            cover_capture,
+            cover_import,
+            cover_remove,
             open_in_editor,
             open_terminal,
             detect_editors,

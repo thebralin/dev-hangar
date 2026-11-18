@@ -3,9 +3,10 @@ import { computed, ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import Icon from "./Icon.vue";
 import StackBadge from "./StackBadge.vue";
+import ProjectAvatar from "./ProjectAvatar.vue";
 import {
   state, addProject, removeProject, selectProject, scanFolder, activityOf, isRunning,
-  displayName, toast, norm, refreshAllBriefs, type ProjectEntry,
+  displayName, toast, norm, refreshAllBriefs, filterProjects, type ProjectEntry,
 } from "../lib/store";
 import { parentDir, baseName } from "../lib/api";
 import { relTime } from "../lib/format";
@@ -16,23 +17,13 @@ const q = ref("");
 const menu = ref(false);
 const scanning = ref(false);
 
-const filtered = computed(() => {
-  const s = q.value.trim().toLowerCase();
-  let list = state.projects.filter((p) => {
-    if (!s) return true;
-    const b = state.briefs[p.path];
-    const hay = [displayName(p), p.path, ...(b?.info?.stacks.map((x) => x.label) ?? [])].join(" ").toLowerCase();
-    return s.split(/\s+/).every((part) => hay.includes(part));
-  });
-  const by = state.settings.sortBy;
-  list = [...list].sort((a, b) => {
-    if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
-    if (by === "name") return displayName(a).localeCompare(displayName(b));
-    if (by === "added") return b.addedAt - a.addedAt;
-    return activityOf(b.path) - activityOf(a.path);
-  });
-  return list;
-});
+const collapsed = computed(() => state.settings.sidebarCollapsed);
+function toggleCollapsed() {
+  state.settings.sidebarCollapsed = !state.settings.sidebarCollapsed;
+  menu.value = false;
+}
+
+const filtered = computed(() => filterProjects(collapsed.value ? "" : q.value));
 
 const groups = computed(() => {
   if (!state.settings.groupByFolder || q.value) return [{ key: "", name: "", items: filtered.value }];
@@ -52,6 +43,14 @@ const groups = computed(() => {
 });
 
 const runningCount = computed(() => Object.values(state.procs).filter((p) => p.status === "running").length);
+
+function isActive(p: ProjectEntry) {
+  return state.view === "project" && !!state.selected && norm(state.selected) === norm(p.path);
+}
+
+function toggleView(v: "grid" | "disk" | "plugins") {
+  state.view = state.view === v ? "project" : v;
+}
 
 async function addDialog() {
   menu.value = false;
@@ -92,7 +91,73 @@ function dirtyCount(p: ProjectEntry) {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <!-- ───────── collapsed: narrow rail ───────── -->
+  <aside v-if="collapsed" class="sidebar rail">
+    <div class="rhead">
+      <button class="rbtn logo-btn" title="Развернуть панель (Ctrl+B)" @click="toggleCollapsed">
+        <svg class="mark" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 20V11a9 9 0 0 1 18 0v9z" fill="currentColor" />
+          <rect x="7.5" y="12.5" width="9" height="7.5" fill="var(--bg-2)" />
+          <path d="M9.5 14.5l2 1.5-2 1.5M12.8 17.6h2" stroke="var(--text)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        </svg>
+      </button>
+      <button class="rbtn" :class="{ on: state.view === 'grid' }" title="Все проекты сеткой" @click="toggleView('grid')"><Icon name="grid" :size="16" /></button>
+      <div class="add-wrap">
+        <button class="rbtn" title="Добавить" @click="menu = !menu"><Icon name="plus" :size="16" /></button>
+        <div v-if="menu" class="menu rail-menu" @mouseleave="menu = false">
+          <button @click="addDialog"><Icon name="folder" :size="14" /> Добавить проект…</button>
+          <button @click="scanDialog"><Icon name="search" :size="14" /> Найти проекты в папке…</button>
+          <button @click="menu = false; refreshAllBriefs()"><Icon name="refresh" :size="14" /> Обновить все</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rlist">
+      <button
+        v-for="p in filtered"
+        :key="p.path"
+        class="ritem"
+        :class="{ active: isActive(p) }"
+        :title="`${displayName(p)}\n${p.path}`"
+        @click="selectProject(p.path)"
+      >
+        <ProjectAvatar :entry="p" :size="34" />
+        <span v-if="isRunning(p.path)" class="rlive" />
+        <span v-else-if="dirtyCount(p)" class="rdirty" />
+      </button>
+      <div v-if="scanning" class="rscan"><span class="spinner" /></div>
+    </div>
+
+    <div v-if="host.pages.length" class="rpages">
+      <button
+        v-for="p in host.pages"
+        :key="p.key"
+        class="rbtn"
+        :class="{ on: state.view === p.key }"
+        :title="`${p.page.label} — плагин «${pluginOf(p.pluginId)?.manifest?.name ?? p.pluginId}»`"
+        @click="state.view = state.view === p.key ? 'project' : p.key"
+      >
+        <Icon :name="p.page.icon || 'puzzle'" :size="16" />
+      </button>
+    </div>
+
+    <div class="rfoot">
+      <span v-if="runningCount" class="badge green rcount" title="Запущенные процессы">{{ runningCount }}</span>
+      <button class="rbtn" :class="{ on: state.view === 'disk' }" title="Уборка диска" @click="toggleView('disk')"><Icon name="drive" :size="16" /></button>
+      <button class="rbtn" :class="{ on: state.view === 'plugins' }" title="Плагины" @click="toggleView('plugins')"><Icon name="puzzle" :size="16" /></button>
+      <button
+        class="rbtn"
+        :title="state.settings.theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'"
+        @click="state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark'"
+      >
+        <Icon :name="state.settings.theme === 'dark' ? 'sun' : 'moon'" :size="16" />
+      </button>
+      <button class="rbtn" title="Настройки" @click="emit('settings')"><Icon name="settings" :size="16" /></button>
+    </div>
+  </aside>
+
+  <!-- ───────── expanded ───────── -->
+  <aside v-else class="sidebar">
     <div class="head">
       <div class="logo">
         <svg class="mark" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -103,13 +168,17 @@ function dirtyCount(p: ProjectEntry) {
         <span>Проекты</span>
         <span class="count">{{ state.projects.length }}</span>
       </div>
-      <div class="add-wrap">
-        <button class="btn sm icon primary" title="Добавить" @click="menu = !menu"><Icon name="plus" :size="15" /></button>
-        <div v-if="menu" class="menu" @mouseleave="menu = false">
-          <button @click="addDialog"><Icon name="folder" :size="14" /> Добавить проект…</button>
-          <button @click="scanDialog"><Icon name="search" :size="14" /> Найти проекты в папке…</button>
-          <button @click="menu = false; refreshAllBriefs()"><Icon name="refresh" :size="14" /> Обновить все</button>
+      <div class="head-tools">
+        <button class="btn sm icon ghost" :class="{ on: state.view === 'grid' }" title="Все проекты сеткой" @click="toggleView('grid')"><Icon name="grid" :size="14" /></button>
+        <div class="add-wrap">
+          <button class="btn sm icon primary" title="Добавить" @click="menu = !menu"><Icon name="plus" :size="15" /></button>
+          <div v-if="menu" class="menu" @mouseleave="menu = false">
+            <button @click="addDialog"><Icon name="folder" :size="14" /> Добавить проект…</button>
+            <button @click="scanDialog"><Icon name="search" :size="14" /> Найти проекты в папке…</button>
+            <button @click="menu = false; refreshAllBriefs()"><Icon name="refresh" :size="14" /> Обновить все</button>
+          </div>
         </div>
+        <button class="btn sm icon ghost" title="Свернуть панель (Ctrl+B)" @click="toggleCollapsed"><Icon name="panel-left" :size="14" /></button>
       </div>
     </div>
 
@@ -132,7 +201,7 @@ function dirtyCount(p: ProjectEntry) {
             v-for="p in g.items"
             :key="p.path"
             class="item"
-            :class="{ active: state.view === 'project' && state.selected && norm(state.selected) === norm(p.path) }"
+            :class="{ active: isActive(p) }"
             :title="p.path"
             @click="selectProject(p.path)"
           >
@@ -181,8 +250,8 @@ function dirtyCount(p: ProjectEntry) {
 
     <div class="foot">
       <button class="btn sm icon ghost" title="Настройки" @click="emit('settings')"><Icon name="settings" :size="14" /></button>
-      <button class="btn sm ghost" :class="{ on: state.view === 'disk' }" title="Уборка node_modules, target, dist по всем проектам" @click="state.view = state.view === 'disk' ? 'project' : 'disk'"><Icon name="drive" :size="14" /> Диск</button>
-      <button class="btn sm ghost" :class="{ on: state.view === 'plugins' }" title="Плагины: свои вкладки, кнопки и инструменты" @click="state.view = state.view === 'plugins' ? 'project' : 'plugins'"><Icon name="puzzle" :size="14" /> Плагины</button>
+      <button class="btn sm ghost" :class="{ on: state.view === 'disk' }" title="Уборка node_modules, target, dist по всем проектам" @click="toggleView('disk')"><Icon name="drive" :size="14" /> Диск</button>
+      <button class="btn sm ghost" :class="{ on: state.view === 'plugins' }" title="Плагины: свои вкладки, кнопки и инструменты" @click="toggleView('plugins')"><Icon name="puzzle" :size="14" /> Плагины</button>
       <span class="spacer" />
       <span v-if="runningCount" class="badge green" title="Запущенные процессы"><span class="dot" style="background: var(--green)" />{{ runningCount }}</span>
       <button
@@ -201,9 +270,11 @@ function dirtyCount(p: ProjectEntry) {
   width: 280px; flex: none; display: flex; flex-direction: column;
   background: var(--bg-2); border-right: 1px solid var(--border);
 }
-.head { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px 14px; }
+.head { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 8px 14px; }
+.head-tools { display: flex; align-items: center; gap: 2px; }
+.head-tools .btn.on { background: var(--active); color: var(--text); }
 .logo { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 14px; }
-.logo svg { color: var(--accent); }
+.logo svg, .logo-btn svg { color: var(--accent); }
 .count { font-size: 11px; color: var(--text-3); font-weight: 500; }
 .add-wrap { position: relative; }
 .menu {
@@ -255,4 +326,33 @@ function dirtyCount(p: ProjectEntry) {
 .foot { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); }
 .spinner { width: 12px; height: 12px; border: 2px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ───── rail ───── */
+.rail { width: 58px; align-items: center; }
+.rhead, .rfoot, .rpages { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0 8px; width: 100%; }
+.rhead { border-bottom: 1px solid var(--border); }
+.rfoot { border-top: 1px solid var(--border); padding-top: 8px; }
+.rpages { border-top: 1px solid var(--border); padding: 6px 0; max-height: 25%; overflow-y: auto; flex: none; }
+.rbtn {
+  width: 36px; height: 34px; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 8px; background: none; color: var(--text-2); cursor: pointer;
+}
+.rbtn:hover { background: var(--hover); color: var(--text); }
+.rbtn.on { background: var(--active); color: var(--text); }
+.rail-menu { left: 42px; right: auto; top: 0; }
+.rlist { flex: 1; overflow-y: auto; overflow-x: hidden; width: 100%; padding: 8px 0; display: flex; flex-direction: column; align-items: center; gap: 6px; scrollbar-width: none; }
+.ritem {
+  position: relative; padding: 2px; border: 2px solid transparent; border-radius: 12px; background: none; cursor: pointer;
+  opacity: .82; transition: opacity .12s, border-color .12s;
+}
+.ritem:hover { opacity: 1; }
+.ritem.active { border-color: var(--accent); opacity: 1; }
+.rlive, .rdirty {
+  position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--bg-2);
+}
+.rlive { background: var(--green); }
+.rdirty { background: var(--yellow); }
+.rscan { padding: 6px; }
+.rcount { font-size: 10.5px; padding: 0 6px; }
 </style>

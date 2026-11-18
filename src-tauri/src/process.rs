@@ -1,15 +1,21 @@
 use serde::Serialize;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::Stdio;
-use std::sync::Mutex;
+use std::process::{ChildStdin, Stdio};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::util::{command, shell};
 
+pub struct ProcHandle {
+    pub pid: u32,
+    /// stdin pipe, so the user can type into a running process from the console
+    pub stdin: Option<Arc<Mutex<ChildStdin>>>,
+}
+
 #[derive(Default)]
-pub struct Procs(pub Mutex<HashMap<String, u32>>);
+pub struct Procs(pub Mutex<HashMap<String, ProcHandle>>);
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -64,7 +70,7 @@ pub fn run(app: AppHandle, id: String, cwd: String, cmdline: String, env: HashMa
     }
     let mut c = shell(&cmdline);
     c.current_dir(&dir)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("FORCE_COLOR", "1")
@@ -81,7 +87,8 @@ pub fn run(app: AppHandle, id: String, cwd: String, cmdline: String, env: HashMa
     }
     let mut child = c.spawn().map_err(|e| format!("Не удалось запустить: {}", e))?;
     let pid = child.id();
-    app.state::<Procs>().0.lock().unwrap().insert(id.clone(), pid);
+    let stdin = child.stdin.take().map(|s| Arc::new(Mutex::new(s)));
+    app.state::<Procs>().0.lock().unwrap().insert(id.clone(), ProcHandle { pid, stdin });
 
     if let Some(out) = child.stdout.take() {
         pump(app.clone(), id.clone(), "stdout", out);
@@ -114,7 +121,7 @@ pub fn kill_pid(pid: u32) {
 }
 
 pub fn kill(app: &AppHandle, id: &str) -> Result<(), String> {
-    let pid = app.state::<Procs>().0.lock().unwrap().get(id).copied();
+    let pid = app.state::<Procs>().0.lock().unwrap().get(id).map(|h| h.pid);
     match pid {
         Some(p) => {
             kill_pid(p);
@@ -124,8 +131,22 @@ pub fn kill(app: &AppHandle, id: &str) -> Result<(), String> {
     }
 }
 
+/// Write text to a running process' stdin.
+pub fn write_stdin(app: &AppHandle, id: &str, data: &str) -> Result<(), String> {
+    let pipe = {
+        let procs = app.state::<Procs>();
+        let map = procs.0.lock().unwrap();
+        let h = map.get(id).ok_or("Процесс не запущен")?;
+        h.stdin.clone().ok_or("У процесса нет ввода")?
+    };
+    let mut w = pipe.lock().unwrap();
+    w.write_all(data.as_bytes())
+        .and_then(|_| w.flush())
+        .map_err(|e| format!("Процесс не принимает ввод: {}", e))
+}
+
 pub fn kill_all(app: &AppHandle) {
-    let pids: Vec<u32> = app.state::<Procs>().0.lock().unwrap().values().copied().collect();
+    let pids: Vec<u32> = app.state::<Procs>().0.lock().unwrap().values().map(|h| h.pid).collect();
     for p in pids {
         kill_pid(p);
     }

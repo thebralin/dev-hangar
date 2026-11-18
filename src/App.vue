@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar.vue";
 import ProjectView from "./components/ProjectView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
 import DiskView from "./components/DiskView.vue";
+import GridView from "./components/GridView.vue";
 import PluginsView from "./components/PluginsView.vue";
 import PluginMount from "./components/PluginMount.vue";
 import { host, loadPlugins, startPluginEvents } from "./plugins/host";
@@ -71,6 +72,11 @@ onMounted(async () => {
     if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) {
       if (!import.meta.env.DEV) e.preventDefault();
     }
+    // Ctrl+B — collapse / expand the sidebar
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      state.settings.sidebarCollapsed = !state.settings.sidebarCollapsed;
+    }
   });
 });
 </script>
@@ -79,7 +85,8 @@ onMounted(async () => {
   <div class="app">
     <Sidebar @settings="showSettings = true" />
     <main class="main">
-      <DiskView v-if="state.view === 'disk'" />
+      <GridView v-if="state.view === 'grid'" />
+      <DiskView v-else-if="state.view === 'disk'" />
       <PluginsView v-else-if="state.view === 'plugins'" />
       <PluginMount
         v-else-if="activePage"

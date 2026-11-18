@@ -39,6 +39,21 @@ export function plural(n: number, one: string, few: string, many: string) {
   return many;
 }
 
+/** Stable hue (0–359) for a string — avatar / placeholder colors. */
+export function hueOf(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
+}
+
+/** One or two letters for an avatar: "dev-hangar" → "DH", "Muse" → "MU". */
+export function initials(name: string): string {
+  const words = name.replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
 export const STACK_COLORS: Record<string, string> = {
   vue: "#42b883", nuxt: "#00dc82", astro: "#ff5d01", react: "#61dafb", next: "#a3a3a3",
   svelte: "#ff3e00", sveltekit: "#ff3e00", solid: "#4f88c6", angular: "#dd0031",

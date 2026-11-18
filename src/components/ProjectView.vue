@@ -13,7 +13,7 @@ import GraphTab from "./GraphTab.vue";
 import CheckpointButton from "./CheckpointButton.vue";
 import AiContextModal from "./AiContextModal.vue";
 import PluginMount from "./PluginMount.vue";
-import { state, refreshBrief, runAction, stopProc, procId, displayName, toast, type ProjectEntry } from "../lib/store";
+import { state, refreshBrief, runAction, stopProc, procId, displayName, toast, pickActions, type ProjectEntry } from "../lib/store";
 import { api, type Action } from "../lib/api";
 import { host, isVisible, runPluginAction, projectContextOf } from "../plugins/host";
 
@@ -28,17 +28,8 @@ const nameDraft = ref("");
 
 const allModules = computed(() => (info.value ? [info.value.root, ...info.value.subprojects] : []));
 
-function pickActions(kind: string): Action[] {
-  const root = info.value?.root.actions.find((a) => a.kind === kind);
-  if (root) return [root];
-  const subs = (info.value?.subprojects ?? [])
-    .map((m) => m.actions.find((a) => a.kind === kind))
-    .filter(Boolean) as Action[];
-  // for dev: run all subproject dev servers; for build: only the first
-  return kind === "dev" ? subs : subs.slice(0, 1);
-}
-const devActions = computed(() => pickActions("dev"));
-const buildActions = computed(() => pickActions("build"));
+const devActions = computed(() => pickActions(info.value, "dev"));
+const buildActions = computed(() => pickActions(info.value, "build"));
 
 function runningOf(actions: Action[]) {
   return actions.filter((a) => state.procs[procId(props.entry.path, a.id)]?.status === "running");
